@@ -1,0 +1,29 @@
+{
+  "name": "codex-auto-pilot",
+  "version": "0.1.0",
+  "description": "Safe installer for Codex Auto Pilot skills and agent profiles.",
+  "bin": {
+    "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
+  },
+  "scripts": {
+    "check": "node --check bin/*.mjs && node --check lib/*.mjs && node --check test/*.mjs && node --test && npm run pack:dry",
+    "test": "node --test",
+    "pack:dry": "npm pack --dry-run --json"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "skills/",
+    "templates/agents/",
+    "install.sh",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": ["codex", "agent", "automation", "skills"],
+  "homepage": "https://github.com/tombelieber/codex-auto-pilot#readme",
+  "bugs": {"url": "https://github.com/tombelieber/codex-auto-pilot/issues"},
+  "repository": {"type": "git", "url": "git+https://github.com/tombelieber/codex-auto-pilot.git"},
+  "author": "tombelieber",
+  "license": "MIT",
+  "engines": {"node": ">=18"}
+}
