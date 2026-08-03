@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs'
+import {existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync} from 'node:fs'
 import {mkdtempSync, rmSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
@@ -48,6 +48,15 @@ test('refuses collisions by default', () => {
     writeFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'user content\n')
     assert.throws(() => install({sourceRoot: f.sourceRoot, home: f.home}), /refusing to replace/)
     assert.equal(readFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'utf8'), 'user content\n')
+  } finally { f.cleanup() }
+})
+
+test('treats destination symlinks as collisions', () => {
+  const f = fixture()
+  try {
+    mkdirSync(join(f.home, '.agents', 'skills'), {recursive: true})
+    symlinkSync(join(f.sourceRoot, 'skills', 'auto-pilot'), join(f.home, '.agents', 'skills', 'auto-pilot'))
+    assert.throws(() => install({sourceRoot: f.sourceRoot, home: f.home}), /refusing to replace/)
   } finally { f.cleanup() }
 })
 

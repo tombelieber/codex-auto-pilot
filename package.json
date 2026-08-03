@@ -6,12 +6,13 @@
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
   },
   "scripts": {
-    "check": "node --check bin/*.mjs && node --check lib/*.mjs && node --check test/*.mjs && node --test && npm run pack:dry",
+    "check": "node --check bin/*.mjs && node --check lib/*.mjs && node --check scripts/*.mjs && node --check test/*.mjs && node --test && node scripts/check-public-safety.mjs && npm run pack:dry",
     "test": "node --test",
     "pack:dry": "npm pack --dry-run --json"
   },
   "files": [
     "bin/",
+    ".codex-plugin/",
     "lib/",
     "skills/",
     "templates/agents/",

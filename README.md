@@ -23,11 +23,14 @@ Choose one installation level. All examples pin the immutable `v0.1.0` release.
 
 ### Plugin install: skill only
 
-Install the plugin when Codex only needs the `$auto-pilot` skill. This does **not** add the four custom agent profiles. If plugin installation is unavailable, the skill uses its direct-spawn fallback.
+Install the plugin when Codex only needs the `$auto-pilot` skill. This does **not** add the four custom agent profiles. The skill uses its direct-spawn fallback when those profiles are absent.
 
 ```bash
-codex plugins install github:tombelieber/codex-auto-pilot#v0.1.0
+codex plugin marketplace add tombelieber/tomstack
+codex plugin add codex-auto-pilot@tomstack
 ```
+
+The `tomstack` marketplace entry pins the plugin to the `v0.1.0` Git ref.
 
 ### Full CLI install: skill plus four agent profiles
 
@@ -54,9 +57,6 @@ Useful installer controls:
 ```bash
 # Replace an existing Auto Pilot installation (a backup is made first).
 npx github:tombelieber/codex-auto-pilot#v0.1.0 install --force
-
-# Create a backup without replacing an existing installation.
-npx github:tombelieber/codex-auto-pilot#v0.1.0 install --backup
 
 # Check the installed skill, profiles, and command wiring.
 npx github:tombelieber/codex-auto-pilot#v0.1.0 doctor
