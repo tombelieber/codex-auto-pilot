@@ -226,7 +226,7 @@ test('preserves tabs while scanning historical path text', () => withRepo((root)
 test('allows only the GitHub noreply identity pairs', () => withRepo((root) => {
   writeFileSync(join(root, 'README.md'), 'noreply@github.com and tombelieber@users.noreply.github.com are public-safe\n');
   execFileSync('git', ['add', '.'], {cwd: root});
-  execFileSync('git', ['-c', 'user.name=GitHub', '-c', 'user.email=noreply@github.com', 'commit', '--quiet', '--author=tombelieber <12345+tombelieber@users.noreply.github.com>', '-m', 'GitHub merge metadata'], {cwd: root});
+  execFileSync('git', ['-c', 'user.name=GitHub', '-c', 'user.email=noreply@github.com', 'commit', '--quiet', '--author=Tom Tang <12345+tombelieber@users.noreply.github.com>', '-m', 'GitHub merge metadata'], {cwd: root});
   const allowed = run(root);
   assert.equal(allowed.status, 0, allowed.output);
   writeFileSync(join(root, 'second.md'), 'clean\n');

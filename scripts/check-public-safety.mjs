@@ -12,6 +12,7 @@ const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
 const ALLOWED_CONTENT_EMAIL = /^(?:[A-Z0-9._%+-]+@users\.noreply\.github\.com|noreply@github\.com)$/i
 const ALLOWED_GIT_IDENTITIES = [
   {name: 'tombelieber', email: /^(?:tombelieber|[0-9]+\+tombelieber)@users\.noreply\.github\.com$/i},
+  {name: 'Tom Tang', email: /^(?:tombelieber|[0-9]+\+tombelieber)@users\.noreply\.github\.com$/i},
   {name: 'GitHub', email: /^noreply@github\.com$/i},
 ]
 const SECRET_VALUE = String.raw`(?:[A-Za-z0-9_./+=-]{8,})`
