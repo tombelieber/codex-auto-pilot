@@ -6,4 +6,4 @@
 4. Explain the user-visible change, test evidence, and any risk to install or release behavior.
 5. Do not add telemetry, credentials, personal contact details, private paths, or internal plans to the public repository.
 
-Contributions must preserve the project contract: approved plans drive work, PR delivery is the default, and release/auto-ship remains explicit.
+Contributions must preserve the project contract: complete approved specs drive work, strong command is separate from cheap implementation and independent review, useful parallelism is dynamic rather than statically capped, PR delivery is the default, and release/auto-ship remains explicit.

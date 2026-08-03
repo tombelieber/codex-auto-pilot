@@ -13,16 +13,30 @@ function receipt(state = 'pr_ready') {
   const released = state === 'released'
   const merged = state === 'merged_main' || released
   return {
-    schema_version: 1, mode: merged ? 'release' : 'pr', terminal_state: state,
+    schema_version: 2, mode: merged ? 'release' : 'pr', terminal_state: state,
     plan: {source: 'docs/plan.md', approved: true},
+    effort: {requested: 'auto', resolved: 'xhigh', rationale: 'wide ready frontier and release-sensitive work'},
+    orchestration: {
+      strategy: 'dynamic_ready_frontier',
+      commander: {id: 'commander-1', model: 'gpt-5.6-sol', reasoning_effort: 'xhigh'},
+      implementer_model: 'gpt-5.6-terra',
+      tickets_total: 3, tickets_completed: 3, peak_active_writers: 2,
+      capacity_evidence: 'runtime accepted two ownership-safe writers',
+      integration_evidence: 'three scoped commits integrated with targeted checks',
+    },
     git: {base_branch: 'main', delivery_branch: 'auto-pilot/test', commits: [sha]},
     criteria: [{id: 'AC-1', status: 'passed', evidence: 'test'}],
     checks: [{name: 'test', status: 'passed', evidence: 'npm test'}],
-    reviews: {goal_spec: {status: 'passed', evidence: 'approved'}, engineering_release: {status: 'passed', evidence: 'approved'}},
+    reviews: {
+      goal_spec: {reviewer: 'goal-reviewer-1', model: 'gpt-5.6-sol', reasoning_effort: 'xhigh', status: 'passed', evidence: 'approved'},
+      engineering_release: {reviewer: 'release-reviewer-1', model: 'gpt-5.6-sol', reasoning_effort: 'xhigh', status: 'passed', evidence: 'approved'},
+    },
     pull_request: {url: 'https://github.com/owner/repo/pull/1', status: merged ? 'merged' : 'open', merged, merge_sha: merged ? sha : null},
     release: released
       ? {deploy_mechanism: 'GitHub Releases', status: 'passed', url: 'https://github.com/owner/repo/releases/tag/v1', migrations: 'none', backfills: 'passed', post_release_checks: 'passed', deployment_evidence: 'GitHub release v1 is published', migrations_evidence: 'No migrations apply to this package', backfills_evidence: 'Backfill completed with zero pending rows', post_release_evidence: 'Fresh install and doctor succeeded'}
-      : {deploy_mechanism: 'none_detected', status: 'not_applicable', url: null, migrations: 'none', backfills: 'none', post_release_checks: 'not_applicable', deployment_evidence: 'Repository inspection found no deploy mechanism', migrations_evidence: 'No migrations apply because no deployment exists', backfills_evidence: 'No backfills apply because no deployment exists', post_release_evidence: 'No post-release check applies because no deployment exists'},
+      : merged
+        ? {deploy_mechanism: 'none_detected', status: 'not_applicable', url: null, migrations: 'validated', backfills: 'none', post_release_checks: 'not_applicable', deployment_evidence: 'Repository inspection found no deploy mechanism', migrations_evidence: 'Migration dry-run passed before merge', backfills_evidence: 'No backfills apply', post_release_evidence: 'No post-release check applies because no deployment exists'}
+        : {deploy_mechanism: 'GitHub Actions release.yml', status: 'not_applicable', url: null, migrations: 'validated', backfills: 'none', post_release_checks: 'not_applicable', deployment_evidence: 'Release workflow detected but not invoked in PR mode', migrations_evidence: 'Migration dry-run passed before PR', backfills_evidence: 'No backfills apply', post_release_evidence: 'Post-release checks wait for release authority'},
     blockers: [],
   }
 }
@@ -45,6 +59,14 @@ for (const state of ['pr_ready', 'merged_main', 'released']) {
 test('accepts a valid blocked receipt without delivery evidence', () => {
   const value = receipt('pr_ready')
   value.terminal_state = 'blocked'; value.blockers = [{reason: 'credential missing', evidence: 'CLI output'}]
+  delete value.orchestration; delete value.git; delete value.criteria; delete value.checks; delete value.reviews; delete value.pull_request; delete value.release
+  assert.equal(run(value).status, 0)
+})
+
+test('accepts failed evidence sections on a blocked receipt', () => {
+  const value = receipt('pr_ready')
+  value.terminal_state = 'blocked'; value.blockers = [{reason: 'review failed', evidence: 'goal reviewer finding'}]
+  value.criteria[0].status = 'failed'; value.checks[0].status = 'failed'; value.reviews.goal_spec.status = 'failed'
   assert.equal(run(value).status, 0)
 })
 
@@ -70,6 +92,20 @@ for (const [name, mutate] of [
 }
 
 for (const [name, mutate] of [
+  ['version 1 schema', (value) => { value.schema_version = 1 }],
+  ['auto resolved effort', (value) => { value.effort.resolved = 'auto' }],
+  ['missing effort rationale', (value) => { value.effort.rationale = '' }],
+  ['wrong orchestration strategy', (value) => { value.orchestration.strategy = 'fixed_wave' }],
+  ['wrong commander model', (value) => { value.orchestration.commander.model = 'gpt-5.6-terra' }],
+  ['commander effort mismatch', (value) => { value.orchestration.commander.reasoning_effort = 'high' }],
+  ['wrong implementer model', (value) => { value.orchestration.implementer_model = 'gpt-5.6-sol' }],
+  ['incomplete tickets', (value) => { value.orchestration.tickets_completed = 2 }],
+  ['zero active writers', (value) => { value.orchestration.peak_active_writers = 0 }],
+  ['same final reviewer', (value) => { value.reviews.engineering_release.reviewer = 'goal-reviewer-1' }],
+  ['commander as final reviewer', (value) => { value.reviews.goal_spec.reviewer = 'commander-1' }],
+  ['wrong reviewer model', (value) => { value.reviews.goal_spec.model = 'gpt-5.6-terra' }],
+  ['weak reviewer effort', (value) => { value.reviews.goal_spec.reasoning_effort = 'medium' }],
+  ['executed migration in PR mode', (value) => { value.release.migrations = 'passed' }],
   ['null commit', (value) => { value.git.commits = [null] }],
   ['empty checks', (value) => { value.checks = [] }],
   ['bad PR URL', (value) => { value.pull_request.url = 'github.com/owner/repo' }],

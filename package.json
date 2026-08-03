@@ -1,7 +1,7 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.1.0",
-  "description": "Safe installer for Codex Auto Pilot skills and agent profiles.",
+  "version": "0.2.0",
+  "description": "Dynamic approved-spec execution for Codex with a strong commander and low-cost workers.",
   "bin": {
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
   },

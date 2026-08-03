@@ -12,8 +12,9 @@ function run(args, env = {}) {
 }
 
 test('version, help, and skill-path are available without installation', () => {
-  assert.equal(run(['--version']).stdout.trim(), '0.1.0')
+  assert.equal(run(['--version']).stdout.trim(), '0.2.0')
   assert.match(run(['help']).stdout, /install \[--dry-run\] \[--force\]/)
+  assert.match(run(['help']).stdout, /five named agent profiles/)
   assert.match(run(['skill-path']).stdout.trim(), /skills\/auto-pilot$/)
 })
 
