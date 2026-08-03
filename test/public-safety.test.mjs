@@ -185,6 +185,44 @@ test('follows deleted inner annotated tags and scans their metadata', () => with
   assert.match(result.output, /tag objects=2/);
 }));
 
+test('scans blobs and trees referenced only by annotated tags', () => withRepo((root) => {
+  writeFileSync(join(root, 'README.md'), 'clean\n');
+  execFileSync('git', ['add', '.'], {cwd: root}); commit(root, 'initial');
+  const key = ['sk', 'proj', '1234567890abcdefghijk'].join('-');
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], {cwd: root, input: key, encoding: 'utf8'}).trim();
+  execFileSync('git', ['-c', 'user.name=tombelieber', '-c', 'user.email=tombelieber@users.noreply.github.com', 'tag', '-a', 'blob-only', blob, '-m', 'safe blob tag'], {cwd: root});
+  const privatePath = ['contact-', 'person', '@', 'example.com.md'].join('');
+  const tree = execFileSync('git', ['mktree'], {cwd: root, input: `100644 blob ${blob}\t${privatePath}\n`, encoding: 'utf8'}).trim();
+  execFileSync('git', ['-c', 'user.name=tombelieber', '-c', 'user.email=tombelieber@users.noreply.github.com', 'tag', '-a', 'tree-only', tree, '-m', 'safe tree tag'], {cwd: root});
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.output, /OpenAI API key/);
+  assert.match(result.output, /non-noreply email/);
+  assert.match(result.output, /tag objects=2/);
+}));
+
+test('scans a blob referenced only by a lightweight tag', () => withRepo((root) => {
+  writeFileSync(join(root, 'README.md'), 'clean\n');
+  execFileSync('git', ['add', '.'], {cwd: root}); commit(root, 'initial');
+  const key = ['sk', 'proj', '1234567890abcdefghijk'].join('-');
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], {cwd: root, input: key, encoding: 'utf8'}).trim();
+  execFileSync('git', ['tag', 'blob-only', blob], {cwd: root});
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.output, /OpenAI API key/);
+}));
+
+test('preserves tabs while scanning historical path text', () => withRepo((root) => {
+  const privatePath = ['safe\tcontact-', 'person', '@', 'example.com.md'].join('');
+  writeFileSync(join(root, privatePath), 'clean\n');
+  execFileSync('git', ['add', '.'], {cwd: root}); commit(root, 'add unusual path');
+  execFileSync('git', ['rm', '--quiet', privatePath], {cwd: root}); commit(root, 'remove unusual path');
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.output, /non-noreply email/);
+  assert.doesNotMatch(result.output, /example\.com/);
+}));
+
 test('allows only the GitHub noreply identity pairs', () => withRepo((root) => {
   writeFileSync(join(root, 'README.md'), 'noreply@github.com and tombelieber@users.noreply.github.com are public-safe\n');
   execFileSync('git', ['add', '.'], {cwd: root});

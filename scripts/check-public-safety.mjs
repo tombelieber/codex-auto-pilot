@@ -72,31 +72,42 @@ function scanHistory(root, findings) {
   if (!hasHistory(root)) return {commits: 0, trees: 0, blobs: 0, tag_objects: 0}
   const commits = git(root, ['rev-list', '--all']).trim().split('\n').filter(Boolean)
   const blobs = new Map(); const trees = new Set()
-  for (const commit of commits) {
-    trees.add(git(root, ['show', '-s', '--format=%T', commit]).trim())
-    const metadata = git(root, ['show', '-s', '--format=%B%x00%an%x00%ae%x00%cn%x00%ce', commit]).split('\0')
-    const label = `commit ${commit.slice(0, 12)}`
-    checkContent(findings, label, Buffer.from(metadata[0] || ''))
-    checkIdentity(findings, label, metadata[1], metadata[2])
-    checkIdentity(findings, label, metadata[3], metadata[4])
-    const entries = git(root, ['ls-tree', '-r', '-t', '-z', commit]).split('\0').filter(Boolean)
+  function collectTree(treeish) {
+    const rootTree = git(root, ['rev-parse', `${treeish}^{tree}`]).trim()
+    trees.add(rootTree)
+    const entries = git(root, ['ls-tree', '-r', '-t', '-z', treeish]).split('\0').filter(Boolean)
     for (const entry of entries) {
-      const [header, path] = entry.split('\t'); const [mode, type, oid] = header.split(' ')
+      const separator = entry.indexOf('\t')
+      if (separator < 0) throw new Error('git ls-tree returned an entry without a path separator')
+      const header = entry.slice(0, separator); const path = entry.slice(separator + 1)
+      const [mode, type, oid] = header.split(' ')
       checkPath(findings, path)
       checkPathText(findings, 'historical tree path', path)
       if (type === 'tree') { trees.add(oid); continue }
-      if (mode === '120000') { addFinding(findings, `${commit.slice(0, 12)}:${path}`, 'historical symlinks are not allowed'); continue }
+      if (mode === '120000') { addFinding(findings, 'historical tree entry', 'historical symlinks are not allowed'); continue }
       if (type === 'blob') {
         const paths = blobs.get(oid) || new Set(); paths.add(path); blobs.set(oid, paths)
       }
     }
   }
-  for (const [oid, paths] of blobs) {
-    checkContent(findings, `history blob ${oid.slice(0, 12)}`, gitBuffer(root, ['cat-file', 'blob', oid]))
+  for (const commit of commits) {
+    const metadata = git(root, ['show', '-s', '--format=%B%x00%an%x00%ae%x00%cn%x00%ce', commit]).split('\0')
+    const label = `commit ${commit.slice(0, 12)}`
+    checkContent(findings, label, Buffer.from(metadata[0] || ''))
+    checkIdentity(findings, label, metadata[1], metadata[2])
+    checkIdentity(findings, label, metadata[3], metadata[4])
+    collectTree(commit)
   }
   const tagObjects = new Set()
-  const tagRoots = git(root, ['for-each-ref', '--format=%(objecttype) %(objectname)', 'refs/tags']).split('\n')
-    .map((line) => line.split(' ')).filter(([type, oid]) => type === 'tag' && oid).map(([, oid]) => oid)
+  const refRoots = git(root, ['for-each-ref', '--format=%(objecttype)%09%(objectname)']).split('\n')
+    .map((line) => line.split('\t')).filter(([, oid]) => oid)
+  for (const [type, oid] of refRoots) {
+    if (type === 'tree') collectTree(oid)
+    else if (type === 'blob') {
+      const paths = blobs.get(oid) || new Set(); paths.add('direct ref target'); blobs.set(oid, paths)
+    }
+  }
+  const tagRoots = refRoots.filter(([type]) => type === 'tag').map(([, oid]) => oid)
   const pendingTags = [...tagRoots]
   while (pendingTags.length > 0) {
     const oid = pendingTags.pop()
@@ -108,8 +119,17 @@ function scanHistory(root, findings) {
     const tagger = raw.toString('utf8').match(/^tagger (.+) <([^>]+)> /m)
     if (!tagger) addFinding(findings, label, 'is missing valid tagger metadata')
     else checkIdentity(findings, label, tagger[1], tagger[2])
-    const target = raw.toString('utf8').match(/^object ([0-9a-f]+)\ntype tag(?:\n|$)/m)
-    if (target) pendingTags.push(target[1])
+    const target = raw.toString('utf8').match(/^object ([0-9a-f]+)\ntype (blob|tree|commit|tag)(?:\n|$)/m)
+    if (!target) { addFinding(findings, label, 'has an unsupported target'); continue }
+    const [, targetOid, targetType] = target
+    if (targetType === 'tag') pendingTags.push(targetOid)
+    else if (targetType === 'tree') collectTree(targetOid)
+    else if (targetType === 'blob') {
+      const paths = blobs.get(targetOid) || new Set(); paths.add('annotated tag target'); blobs.set(targetOid, paths)
+    }
+  }
+  for (const oid of blobs.keys()) {
+    checkContent(findings, `history blob ${oid.slice(0, 12)}`, gitBuffer(root, ['cat-file', 'blob', oid]))
   }
   return {commits: commits.length, trees: trees.size, blobs: blobs.size, tag_objects: tagObjects.size}
 }
