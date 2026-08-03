@@ -1,0 +1,14 @@
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+
+# Node and test output
+node_modules/
+coverage/
+.nyc_output/
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/
