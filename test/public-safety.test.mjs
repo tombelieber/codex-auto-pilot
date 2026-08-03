@@ -31,7 +31,7 @@ function withRepo(fn) {
   }
 }
 
-function commit(root, message, email = 'safe@users.noreply.github.com', name = 'tombelieber') {
+function commit(root, message, email = 'tombelieber@users.noreply.github.com', name = 'tombelieber') {
   execFileSync('git', ['-c', `user.name=${name}`, '-c', `user.email=${email}`, 'commit', '--quiet', '-m', message], {cwd: root});
 }
 
@@ -93,7 +93,7 @@ test('rejects deleted private paths and non-noreply commit metadata', () => with
   const result = run(root);
   assert.equal(result.status, 1);
   assert.match(result.output, /environment files/);
-  assert.match(result.output, /author or committer email/);
+  assert.match(result.output, /unexpected author or committer identity/);
 }));
 
 test('rejects a shallow clone even when its visible tree is clean', () => withRepo((root) => {
@@ -123,12 +123,12 @@ test('scans the scanner source itself without regex-source false positives', () 
 test('rejects private commit messages and unexpected author or committer names', () => withRepo((root) => {
   writeFileSync(join(root, 'README.md'), 'clean\n');
   execFileSync('git', ['add', 'README.md'], {cwd: root});
-  commit(root, `private ${['person', '@', 'example.com'].join('')} ${['/Users', 'person', 'project'].join('/')}`, 'safe@users.noreply.github.com', 'Other Person');
+  commit(root, `private ${['person', '@', 'example.com'].join('')} ${['/Users', 'person', 'project'].join('/')}`, 'tombelieber@users.noreply.github.com', 'Other Person');
   const result = run(root);
   assert.equal(result.status, 1);
   assert.match(result.output, /non-noreply email/);
   assert.match(result.output, /private absolute home path/);
-  assert.match(result.output, /unexpected author or committer name/);
+  assert.match(result.output, /unexpected author or committer identity/);
 }));
 
 test('rejects private annotated tag messages and tagger metadata', () => withRepo((root) => {
@@ -138,7 +138,7 @@ test('rejects private annotated tag messages and tagger metadata', () => withRep
   const result = run(root);
   assert.equal(result.status, 1);
   assert.match(result.output, /private absolute home path/);
-  assert.match(result.output, /unexpected author or committer name/);
+  assert.match(result.output, /unexpected author or committer identity/);
   assert.match(result.output, /tag objects=1/);
 }));
 
@@ -146,4 +146,54 @@ test('an unborn repository works', () => withRepo((root) => {
   writeFileSync(join(root, 'README.md'), 'clean\n');
   const result = run(root);
   assert.equal(result.status, 0, result.output);
+}));
+
+test('rejects sensitive-looking working and historical path text without echoing it', () => withRepo((root) => {
+  const emailPath = ['contact-', 'person', '@', 'example.com.md'].join('');
+  const keyPath = ['sk', 'proj', '1234567890abcdefghijk'].join('-');
+  writeFileSync(join(root, emailPath), 'clean\n');
+  writeFileSync(join(root, keyPath), 'clean\n');
+  execFileSync('git', ['add', '.'], {cwd: root}); commit(root, 'path secrets');
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.output, /non-noreply email/);
+  assert.match(result.output, /OpenAI API key/);
+  assert.doesNotMatch(result.output, new RegExp(emailPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(result.output, new RegExp(keyPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}));
+
+test('counts every reachable nested tree object', () => withRepo((root) => {
+  mkdirSync(join(root, 'docs', 'nested'), {recursive: true});
+  writeFileSync(join(root, 'README.md'), 'clean\n');
+  writeFileSync(join(root, 'docs', 'nested', 'guide.md'), 'clean\n');
+  execFileSync('git', ['add', '.'], {cwd: root}); commit(root, 'nested trees');
+  const result = run(root);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /trees=3/);
+}));
+
+test('follows deleted inner annotated tags and scans their metadata', () => withRepo((root) => {
+  writeFileSync(join(root, 'README.md'), 'clean\n');
+  execFileSync('git', ['add', '.'], {cwd: root}); commit(root, 'initial');
+  const privatePath = ['/Users', 'person', 'private'].join('/');
+  execFileSync('git', ['-c', 'user.name=tombelieber', '-c', 'user.email=tombelieber@users.noreply.github.com', 'tag', '-a', 'inner', '-m', privatePath], {cwd: root});
+  execFileSync('git', ['-c', 'user.name=tombelieber', '-c', 'user.email=tombelieber@users.noreply.github.com', 'tag', '-a', 'outer', 'inner', '-m', 'safe outer tag'], {cwd: root});
+  execFileSync('git', ['tag', '-d', 'inner'], {cwd: root});
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.output, /private absolute home path/);
+  assert.match(result.output, /tag objects=2/);
+}));
+
+test('allows only the GitHub noreply identity pairs', () => withRepo((root) => {
+  writeFileSync(join(root, 'README.md'), 'noreply@github.com and tombelieber@users.noreply.github.com are public-safe\n');
+  execFileSync('git', ['add', '.'], {cwd: root});
+  execFileSync('git', ['-c', 'user.name=GitHub', '-c', 'user.email=noreply@github.com', 'commit', '--quiet', '--author=tombelieber <12345+tombelieber@users.noreply.github.com>', '-m', 'GitHub merge metadata'], {cwd: root});
+  const allowed = run(root);
+  assert.equal(allowed.status, 0, allowed.output);
+  writeFileSync(join(root, 'second.md'), 'clean\n');
+  execFileSync('git', ['add', '.'], {cwd: root}); commit(root, 'bad local identity', 'root@localhost');
+  const rejected = run(root);
+  assert.equal(rejected.status, 1);
+  assert.match(rejected.output, /unexpected author or committer identity/);
 }));

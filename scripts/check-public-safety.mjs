@@ -8,8 +8,12 @@ import {pathToFileURL} from 'node:url'
 const ALLOWED_ENV_FILES = new Set(['.env.example'])
 const PRIVATE_KEY_FILE = /(?:^|\/)(?:id_(?:rsa|dsa|ecdsa|ed25519)|.*\.(?:pem|p12|pfx|key))$/i
 const PRIVATE_PATH = /(?:\/Users\/[^/\s]+|\/home\/[^/\s]+|[A-Za-z]:\\Users\\[^\\\s]+)/
-const NON_NOREPLY_EMAIL = /\b[A-Z0-9._%+-]+@(?!users\.noreply\.github\.com\b)[A-Z0-9.-]+\.[A-Z]{2,}\b/i
-const ALLOWED_GIT_IDENTITY = 'tombelieber'
+const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
+const ALLOWED_CONTENT_EMAIL = /^(?:[A-Z0-9._%+-]+@users\.noreply\.github\.com|noreply@github\.com)$/i
+const ALLOWED_GIT_IDENTITIES = [
+  {name: 'tombelieber', email: /^(?:tombelieber|[0-9]+\+tombelieber)@users\.noreply\.github\.com$/i},
+  {name: 'GitHub', email: /^noreply@github\.com$/i},
+]
 const SECRET_VALUE = String.raw`(?:[A-Za-z0-9_./+=-]{8,})`
 const SECRET_PATTERNS = [
   {name: 'OpenAI API key', pattern: /\bsk-(?:proj-)?[A-Za-z0-9_-]{16,}\b/},
@@ -34,13 +38,17 @@ function checkPath(findings, file) {
 function checkContent(findings, label, content) {
   const text = content.toString('utf8')
   if (PRIVATE_PATH.test(text)) addFinding(findings, label, 'contains a private absolute home path')
-  if (NON_NOREPLY_EMAIL.test(text)) addFinding(findings, label, 'contains a non-noreply email address')
+  const emails = text.match(EMAIL) || []
+  if (emails.some((email) => !ALLOWED_CONTENT_EMAIL.test(email))) addFinding(findings, label, 'contains a non-noreply email address')
   for (const {name, pattern} of SECRET_PATTERNS) if (pattern.test(text)) addFinding(findings, label, `contains ${name}`)
 }
 function checkIdentity(findings, label, name, email) {
-  if (name !== ALLOWED_GIT_IDENTITY) addFinding(findings, label, 'contains an unexpected author or committer name')
-  if (!email || NON_NOREPLY_EMAIL.test(email)) addFinding(findings, label, 'contains a non-noreply author or committer email')
+  if (!ALLOWED_GIT_IDENTITIES.some((identity) => identity.name === (name || '').trim() && identity.email.test((email || '').trim()))) {
+    addFinding(findings, label, 'contains an unexpected author or committer identity')
+  }
 }
+
+function checkPathText(findings, label, path) { checkContent(findings, label, Buffer.from(path)) }
 
 function scanWorkingTree(root, findings) {
   let files = 0
@@ -48,9 +56,10 @@ function scanWorkingTree(root, findings) {
     const absolute = resolve(root, file)
     if (!existsSync(absolute)) continue
     const stats = lstatSync(absolute); files += 1
+    checkPath(findings, file)
+    checkPathText(findings, 'working tree path', file)
     if (stats.isSymbolicLink()) { addFinding(findings, file, 'symlinks are not allowed'); continue }
     if (!stats.isFile()) continue
-    checkPath(findings, file)
     checkContent(findings, file, readFileSync(absolute))
   }
   return files
@@ -63,7 +72,6 @@ function scanHistory(root, findings) {
   if (!hasHistory(root)) return {commits: 0, trees: 0, blobs: 0, tag_objects: 0}
   const commits = git(root, ['rev-list', '--all']).trim().split('\n').filter(Boolean)
   const blobs = new Map(); const trees = new Set()
-  for (const path of new Set(git(root, ['log', '--all', '--format=', '--name-only']).split('\n').filter(Boolean))) checkPath(findings, path)
   for (const commit of commits) {
     trees.add(git(root, ['show', '-s', '--format=%T', commit]).trim())
     const metadata = git(root, ['show', '-s', '--format=%B%x00%an%x00%ae%x00%cn%x00%ce', commit]).split('\0')
@@ -71,10 +79,12 @@ function scanHistory(root, findings) {
     checkContent(findings, label, Buffer.from(metadata[0] || ''))
     checkIdentity(findings, label, metadata[1], metadata[2])
     checkIdentity(findings, label, metadata[3], metadata[4])
-    const entries = git(root, ['ls-tree', '-r', '-z', commit]).split('\0').filter(Boolean)
+    const entries = git(root, ['ls-tree', '-r', '-t', '-z', commit]).split('\0').filter(Boolean)
     for (const entry of entries) {
       const [header, path] = entry.split('\t'); const [mode, type, oid] = header.split(' ')
       checkPath(findings, path)
+      checkPathText(findings, 'historical tree path', path)
+      if (type === 'tree') { trees.add(oid); continue }
       if (mode === '120000') { addFinding(findings, `${commit.slice(0, 12)}:${path}`, 'historical symlinks are not allowed'); continue }
       if (type === 'blob') {
         const paths = blobs.get(oid) || new Set(); paths.add(path); blobs.set(oid, paths)
@@ -84,17 +94,24 @@ function scanHistory(root, findings) {
   for (const [oid, paths] of blobs) {
     checkContent(findings, `history blob ${oid.slice(0, 12)}`, gitBuffer(root, ['cat-file', 'blob', oid]))
   }
-  const tagObjects = git(root, ['for-each-ref', '--format=%(objecttype) %(objectname)', 'refs/tags']).split('\n')
-    .map((line) => line.split(' ')).filter(([type, oid]) => type === 'tag' && oid)
-  for (const [, oid] of tagObjects) {
+  const tagObjects = new Set()
+  const tagRoots = git(root, ['for-each-ref', '--format=%(objecttype) %(objectname)', 'refs/tags']).split('\n')
+    .map((line) => line.split(' ')).filter(([type, oid]) => type === 'tag' && oid).map(([, oid]) => oid)
+  const pendingTags = [...tagRoots]
+  while (pendingTags.length > 0) {
+    const oid = pendingTags.pop()
+    if (tagObjects.has(oid)) continue
+    tagObjects.add(oid)
     const label = `annotated tag ${oid.slice(0, 12)}`
     const raw = gitBuffer(root, ['cat-file', 'tag', oid])
     checkContent(findings, label, raw)
     const tagger = raw.toString('utf8').match(/^tagger (.+) <([^>]+)> /m)
     if (!tagger) addFinding(findings, label, 'is missing valid tagger metadata')
     else checkIdentity(findings, label, tagger[1], tagger[2])
+    const target = raw.toString('utf8').match(/^object ([0-9a-f]+)\ntype tag(?:\n|$)/m)
+    if (target) pendingTags.push(target[1])
   }
-  return {commits: commits.length, trees: trees.size, blobs: blobs.size, tag_objects: tagObjects.length}
+  return {commits: commits.length, trees: trees.size, blobs: blobs.size, tag_objects: tagObjects.size}
 }
 
 export function checkPublicSafety(cwd = process.cwd()) {
