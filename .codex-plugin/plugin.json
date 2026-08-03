@@ -1,7 +1,7 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.1.0",
-  "description": "Execute approved software plans into evidence-backed PRs or releases.",
+  "version": "0.2.0",
+  "description": "Dynamically execute approved software contracts into evidence-backed PRs or releases.",
   "author": { "name": "tombelieber", "url": "https://github.com/tombelieber" },
   "homepage": "https://github.com/tombelieber/codex-auto-pilot",
   "repository": "https://github.com/tombelieber/codex-auto-pilot",
@@ -10,13 +10,13 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Codex Auto Pilot",
-    "shortDescription": "Turn an approved plan into a verified PR or release",
-    "longDescription": "Runs an approved plan through isolated implementation, independent review, repair, and receipt-backed delivery.",
+    "shortDescription": "Dynamically execute an approved spec into a verified PR",
+    "longDescription": "Uses a strong commander, elastic low-cost workers, independent final review, repair, and receipt-backed delivery.",
     "developerName": "tombelieber",
     "category": "Productivity",
     "capabilities": ["Write", "Review", "Git"],
     "websiteURL": "https://github.com/tombelieber/codex-auto-pilot",
-    "defaultPrompt": ["Use $auto-pilot to execute my approved plan and prepare a production-ready PR."],
+    "defaultPrompt": ["Use $auto-pilot to dynamically execute my complete approved spec and prepare a production-ready PR."],
     "brandColor": "#2563EB"
   }
 }

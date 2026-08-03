@@ -14,7 +14,7 @@ function fixture() {
   writeFileSync(join(sourceRoot, 'skills', 'auto-pilot', 'SKILL.md'), '# Auto Pilot\n')
   writeFileSync(join(sourceRoot, 'skills', 'auto-pilot', 'nested', 'rule.txt'), 'safe\n')
   mkdirSync(join(sourceRoot, 'templates', 'agents'), {recursive: true})
-  for (const name of ['planner.toml', 'builder.toml', 'reviewer.toml', 'verifier.toml']) {
+  for (const name of ['commander.toml', 'planner.toml', 'builder.toml', 'reviewer.toml', 'verifier.toml']) {
     writeFileSync(join(sourceRoot, 'templates', 'agents', name), `name = "${name}"\n`)
   }
   return {root, sourceRoot, home, cleanup: () => rmSync(root, {recursive: true, force: true})}
@@ -24,18 +24,18 @@ test('dry-run writes nothing', () => {
   const f = fixture()
   try {
     const result = install({sourceRoot: f.sourceRoot, home: f.home, dryRun: true})
-    assert.equal(result.items.filter((item) => item.status === 'would install').length, 5)
+    assert.equal(result.items.filter((item) => item.status === 'would install').length, 6)
     assert.equal(existsSync(f.home), false)
   } finally { f.cleanup() }
 })
 
-test('installs default Codex destinations and four profiles', () => {
+test('installs default Codex destinations and five profiles', () => {
   const f = fixture()
   try {
     const result = install({sourceRoot: f.sourceRoot, home: f.home})
-    assert.equal(result.items.filter((item) => item.status === 'installed').length, 5)
+    assert.equal(result.items.filter((item) => item.status === 'installed').length, 6)
     assert.equal(readFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'utf8'), '# Auto Pilot\n')
-    for (const name of ['planner.toml', 'builder.toml', 'reviewer.toml', 'verifier.toml']) {
+    for (const name of ['commander.toml', 'planner.toml', 'builder.toml', 'reviewer.toml', 'verifier.toml']) {
       assert.equal(existsSync(join(f.home, '.codex', 'agents', name)), true)
     }
   } finally { f.cleanup() }
@@ -119,7 +119,7 @@ test('repeat install skips identical managed content and never touches config.to
     writeFileSync(config, 'model = "private-value"\n')
     install({sourceRoot: f.sourceRoot, home: f.home})
     const repeated = install({sourceRoot: f.sourceRoot, home: f.home})
-    assert.equal(repeated.items.filter((item) => item.status === 'skipped').length, 5)
+    assert.equal(repeated.items.filter((item) => item.status === 'skipped').length, 6)
     assert.equal(readFileSync(config, 'utf8'), 'model = "private-value"\n')
   } finally { f.cleanup() }
 })
@@ -129,9 +129,9 @@ test('doctor reports current targets without reading config.toml', () => {
   try {
     install({sourceRoot: f.sourceRoot, home: f.home})
     const result = doctor({sourceRoot: f.sourceRoot, home: f.home})
-    assert.equal(result.items.length, 5)
+    assert.equal(result.items.length, 6)
     assert.ok(result.items.every((item) => item.status === 'current'))
-    assert.equal(resolvePaths({sourceRoot: f.sourceRoot, home: f.home}).items.length, 5)
+    assert.equal(resolvePaths({sourceRoot: f.sourceRoot, home: f.home}).items.length, 6)
   } finally { f.cleanup() }
 })
 

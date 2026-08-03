@@ -53,6 +53,6 @@ Usage:
   codex-auto-pilot skill-path
   codex-auto-pilot --version
 
-Install copies the Auto Pilot skill and four named agent profiles. It never edits .codex/config.toml.
+Install copies the Auto Pilot skill and five named agent profiles. It never edits .codex/config.toml.
 Set CODEX_AUTO_PILOT_HOME to use an isolated Codex home.`)
 }
