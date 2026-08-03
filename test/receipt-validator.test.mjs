@@ -21,8 +21,8 @@ function receipt(state = 'pr_ready') {
     reviews: {goal_spec: {status: 'passed', evidence: 'approved'}, engineering_release: {status: 'passed', evidence: 'approved'}},
     pull_request: {url: 'https://github.com/owner/repo/pull/1', status: merged ? 'merged' : 'open', merged, merge_sha: merged ? sha : null},
     release: released
-      ? {deploy_mechanism: 'GitHub Releases', status: 'passed', url: 'https://github.com/owner/repo/releases/tag/v1', migrations: 'none', backfills: 'passed', post_release_checks: 'passed'}
-      : {deploy_mechanism: 'none_detected', status: 'not_applicable', url: null, migrations: 'none', backfills: 'none', post_release_checks: 'not_applicable'},
+      ? {deploy_mechanism: 'GitHub Releases', status: 'passed', url: 'https://github.com/owner/repo/releases/tag/v1', migrations: 'none', backfills: 'passed', post_release_checks: 'passed', deployment_evidence: 'GitHub release v1 is published', migrations_evidence: 'No migrations apply to this package', backfills_evidence: 'Backfill completed with zero pending rows', post_release_evidence: 'Fresh install and doctor succeeded'}
+      : {deploy_mechanism: 'none_detected', status: 'not_applicable', url: null, migrations: 'none', backfills: 'none', post_release_checks: 'not_applicable', deployment_evidence: 'Repository inspection found no deploy mechanism', migrations_evidence: 'No migrations apply because no deployment exists', backfills_evidence: 'No backfills apply because no deployment exists', post_release_evidence: 'No post-release check applies because no deployment exists'},
     blockers: [],
   }
 }
@@ -47,6 +47,27 @@ test('accepts a valid blocked receipt without delivery evidence', () => {
   value.terminal_state = 'blocked'; value.blockers = [{reason: 'credential missing', evidence: 'CLI output'}]
   assert.equal(run(value).status, 0)
 })
+
+test('rejects missing release operation evidence', () => {
+  const value = receipt('released')
+  value.release.post_release_evidence = ''
+  assert.equal(run(value).status, 1)
+})
+
+for (const [name, mutate] of [
+  ['null included commits', (value) => { value.git = {base_branch: 'main', delivery_branch: 'branch', commits: [null]} }],
+  ['empty included criteria', (value) => { value.criteria = [] }],
+  ['invalid included PR URL', (value) => { value.pull_request = {url: 'invalid', status: 'open', merged: false, merge_sha: null} }],
+  ['invalid included release type', (value) => { value.release = {deploy_mechanism: 'none_detected', status: 'wrong', url: null, migrations: 'none', backfills: 'none', post_release_checks: 'not_applicable', deployment_evidence: 'none', migrations_evidence: 'none', backfills_evidence: 'none', post_release_evidence: 'none'} }],
+]) {
+  test(`rejects ${name} on a blocked receipt`, () => {
+    const value = receipt('pr_ready')
+    value.terminal_state = 'blocked'; value.blockers = [{reason: 'credential missing', evidence: 'CLI output'}]
+    delete value.git; delete value.criteria; delete value.checks; delete value.reviews; delete value.pull_request; delete value.release
+    mutate(value)
+    assert.equal(run(value).status, 1)
+  })
+}
 
 for (const [name, mutate] of [
   ['null commit', (value) => { value.git.commits = [null] }],

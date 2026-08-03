@@ -12,3 +12,7 @@ coverage/
 .DS_Store
 .idea/
 .vscode/
+
+# Python validator cache
+__pycache__/
+*.py[cod]

@@ -27,9 +27,9 @@ async function main(argv) {
   }
   if (command === 'doctor') {
     const result = doctor({sourceRoot: packageRoot})
-    for (const item of result.items) console.log(`${item.present ? 'present' : 'missing'} ${item.destination}`)
+    for (const item of result.items) console.log(`${item.status} ${item.destination}`)
     console.log('global concurrency: optional (not read)')
-    return result.items.every((item) => item.present) ? undefined : (process.exitCode = 1)
+    return result.items.every((item) => item.status === 'current') ? undefined : (process.exitCode = 1)
   }
   throw new Error(`unknown command: ${command}`)
 }

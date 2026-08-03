@@ -124,14 +124,24 @@ test('repeat install skips identical managed content and never touches config.to
   } finally { f.cleanup() }
 })
 
-test('doctor reports installed targets without reading config.toml', () => {
+test('doctor reports current targets without reading config.toml', () => {
   const f = fixture()
   try {
     install({sourceRoot: f.sourceRoot, home: f.home})
     const result = doctor({sourceRoot: f.sourceRoot, home: f.home})
     assert.equal(result.items.length, 5)
-    assert.ok(result.items.every((item) => item.present))
+    assert.ok(result.items.every((item) => item.status === 'current'))
     assert.equal(resolvePaths({sourceRoot: f.sourceRoot, home: f.home}).items.length, 5)
+  } finally { f.cleanup() }
+})
+
+test('doctor reports a corrupted target as mismatch', () => {
+  const f = fixture()
+  try {
+    install({sourceRoot: f.sourceRoot, home: f.home})
+    writeFileSync(join(f.home, '.codex', 'agents', 'builder.toml'), 'corrupt\n')
+    const result = doctor({sourceRoot: f.sourceRoot, home: f.home})
+    assert.equal(result.items.find((item) => item.name === 'profile:builder.toml').status, 'mismatch')
   } finally { f.cleanup() }
 })
 

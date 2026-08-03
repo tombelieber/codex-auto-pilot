@@ -2,14 +2,14 @@
 
 import {execFileSync} from 'node:child_process'
 import {existsSync, lstatSync, readFileSync} from 'node:fs'
-import {relative, resolve} from 'node:path'
-import {fileURLToPath, pathToFileURL} from 'node:url'
+import {resolve} from 'node:path'
+import {pathToFileURL} from 'node:url'
 
-const SELF_PATH = fileURLToPath(import.meta.url)
 const ALLOWED_ENV_FILES = new Set(['.env.example'])
 const PRIVATE_KEY_FILE = /(?:^|\/)(?:id_(?:rsa|dsa|ecdsa|ed25519)|.*\.(?:pem|p12|pfx|key))$/i
 const PRIVATE_PATH = /(?:\/Users\/[^/\s]+|\/home\/[^/\s]+|[A-Za-z]:\\Users\\[^\\\s]+)/
 const NON_NOREPLY_EMAIL = /\b[A-Z0-9._%+-]+@(?!users\.noreply\.github\.com\b)[A-Z0-9.-]+\.[A-Z]{2,}\b/i
+const ALLOWED_GIT_IDENTITY = 'tombelieber'
 const SECRET_VALUE = String.raw`(?:[A-Za-z0-9_./+=-]{8,})`
 const SECRET_PATTERNS = [
   {name: 'OpenAI API key', pattern: /\bsk-(?:proj-)?[A-Za-z0-9_-]{16,}\b/},
@@ -37,6 +37,10 @@ function checkContent(findings, label, content) {
   if (NON_NOREPLY_EMAIL.test(text)) addFinding(findings, label, 'contains a non-noreply email address')
   for (const {name, pattern} of SECRET_PATTERNS) if (pattern.test(text)) addFinding(findings, label, `contains ${name}`)
 }
+function checkIdentity(findings, label, name, email) {
+  if (name !== ALLOWED_GIT_IDENTITY) addFinding(findings, label, 'contains an unexpected author or committer name')
+  if (!email || NON_NOREPLY_EMAIL.test(email)) addFinding(findings, label, 'contains a non-noreply author or committer email')
+}
 
 function scanWorkingTree(root, findings) {
   let files = 0
@@ -47,20 +51,26 @@ function scanWorkingTree(root, findings) {
     if (stats.isSymbolicLink()) { addFinding(findings, file, 'symlinks are not allowed'); continue }
     if (!stats.isFile()) continue
     checkPath(findings, file)
-    if (absolute !== SELF_PATH) checkContent(findings, file, readFileSync(absolute))
+    checkContent(findings, file, readFileSync(absolute))
   }
   return files
 }
 
 function scanHistory(root, findings) {
-  if (!hasHistory(root)) return {commits: 0, trees: 0, blobs: 0}
+  if (git(root, ['rev-parse', '--is-shallow-repository']).trim() === 'true') {
+    addFinding(findings, 'repository history', 'is shallow and cannot be scanned completely')
+  }
+  if (!hasHistory(root)) return {commits: 0, trees: 0, blobs: 0, tag_objects: 0}
   const commits = git(root, ['rev-list', '--all']).trim().split('\n').filter(Boolean)
   const blobs = new Map(); const trees = new Set()
   for (const path of new Set(git(root, ['log', '--all', '--format=', '--name-only']).split('\n').filter(Boolean))) checkPath(findings, path)
   for (const commit of commits) {
     trees.add(git(root, ['show', '-s', '--format=%T', commit]).trim())
-    const metadata = git(root, ['show', '-s', '--format=%an%x00%ae%x00%cn%x00%ce', commit]).split('\0')
-    for (const email of [metadata[1], metadata[3]]) if (email && NON_NOREPLY_EMAIL.test(email)) addFinding(findings, `commit ${commit.slice(0, 12)}`, 'contains a non-noreply author or committer email')
+    const metadata = git(root, ['show', '-s', '--format=%B%x00%an%x00%ae%x00%cn%x00%ce', commit]).split('\0')
+    const label = `commit ${commit.slice(0, 12)}`
+    checkContent(findings, label, Buffer.from(metadata[0] || ''))
+    checkIdentity(findings, label, metadata[1], metadata[2])
+    checkIdentity(findings, label, metadata[3], metadata[4])
     const entries = git(root, ['ls-tree', '-r', '-z', commit]).split('\0').filter(Boolean)
     for (const entry of entries) {
       const [header, path] = entry.split('\t'); const [mode, type, oid] = header.split(' ')
@@ -71,12 +81,20 @@ function scanHistory(root, findings) {
       }
     }
   }
-  const selfRelative = relative(root, SELF_PATH)
   for (const [oid, paths] of blobs) {
-    if (paths.size === 1 && paths.has(selfRelative)) continue
     checkContent(findings, `history blob ${oid.slice(0, 12)}`, gitBuffer(root, ['cat-file', 'blob', oid]))
   }
-  return {commits: commits.length, trees: trees.size, blobs: blobs.size}
+  const tagObjects = git(root, ['for-each-ref', '--format=%(objecttype) %(objectname)', 'refs/tags']).split('\n')
+    .map((line) => line.split(' ')).filter(([type, oid]) => type === 'tag' && oid)
+  for (const [, oid] of tagObjects) {
+    const label = `annotated tag ${oid.slice(0, 12)}`
+    const raw = gitBuffer(root, ['cat-file', 'tag', oid])
+    checkContent(findings, label, raw)
+    const tagger = raw.toString('utf8').match(/^tagger (.+) <([^>]+)> /m)
+    if (!tagger) addFinding(findings, label, 'is missing valid tagger metadata')
+    else checkIdentity(findings, label, tagger[1], tagger[2])
+  }
+  return {commits: commits.length, trees: trees.size, blobs: blobs.size, tag_objects: tagObjects.length}
 }
 
 export function checkPublicSafety(cwd = process.cwd()) {
@@ -89,7 +107,7 @@ export function checkPublicSafety(cwd = process.cwd()) {
 export function main(cwd = process.cwd()) {
   try {
     const {findings, evidence} = checkPublicSafety(cwd)
-    const counts = `working files=${evidence.working_files}, commits=${evidence.commits}, trees=${evidence.trees}, blobs=${evidence.blobs}`
+    const counts = `working files=${evidence.working_files}, commits=${evidence.commits}, trees=${evidence.trees}, blobs=${evidence.blobs}, tag objects=${evidence.tag_objects}`
     if (findings.length === 0) { console.log(`Public safety check passed (${counts}).`); return 0 }
     console.error(`Public safety check failed (${counts}):`)
     for (const finding of findings) console.error(`- ${finding}`)

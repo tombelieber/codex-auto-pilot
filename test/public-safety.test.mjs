@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -31,8 +31,8 @@ function withRepo(fn) {
   }
 }
 
-function commit(root, message, email = 'safe@users.noreply.github.com') {
-  execFileSync('git', ['-c', 'user.name=Safe', '-c', `user.email=${email}`, 'commit', '--quiet', '-m', message], {cwd: root});
+function commit(root, message, email = 'safe@users.noreply.github.com', name = 'tombelieber') {
+  execFileSync('git', ['-c', `user.name=${name}`, '-c', `user.email=${email}`, 'commit', '--quiet', '-m', message], {cwd: root});
 }
 
 test('passes safe tracked and untracked files', () => withRepo((root) => {
@@ -94,4 +94,56 @@ test('rejects deleted private paths and non-noreply commit metadata', () => with
   assert.equal(result.status, 1);
   assert.match(result.output, /environment files/);
   assert.match(result.output, /author or committer email/);
+}));
+
+test('rejects a shallow clone even when its visible tree is clean', () => withRepo((root) => {
+  const key = ['sk', 'proj', '1234567890abcdefghijk'].join('-');
+  writeFileSync(join(root, 'removed-secret.txt'), key);
+  execFileSync('git', ['add', 'removed-secret.txt'], {cwd: root}); commit(root, 'add then delete secret');
+  execFileSync('git', ['rm', '--quiet', 'removed-secret.txt'], {cwd: root}); commit(root, 'clean visible tree');
+  const clone = mkdtempSync(join(tmpdir(), 'public-safety-shallow-'));
+  try {
+    execFileSync('git', ['clone', '--quiet', '--depth=1', `file://${root}`, clone]);
+    const result = run(clone);
+    assert.equal(result.status, 1);
+    assert.match(result.output, /shallow/);
+  } finally { rmSync(clone, {recursive: true, force: true}); }
+}));
+
+test('scans the scanner source itself without regex-source false positives', () => withRepo((root) => {
+  mkdirSync(join(root, 'scripts'));
+  const key = ['sk', 'proj', '1234567890abcdefghijk'].join('-');
+  writeFileSync(join(root, 'scripts', 'check-public-safety.mjs'), `${readFileSync(checker, 'utf8')}\n// ${key}\n`);
+  execFileSync('git', ['add', '.'], {cwd: root}); commit(root, 'add scanner');
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.output, /OpenAI API key/);
+}));
+
+test('rejects private commit messages and unexpected author or committer names', () => withRepo((root) => {
+  writeFileSync(join(root, 'README.md'), 'clean\n');
+  execFileSync('git', ['add', 'README.md'], {cwd: root});
+  commit(root, `private ${['person', '@', 'example.com'].join('')} ${['/Users', 'person', 'project'].join('/')}`, 'safe@users.noreply.github.com', 'Other Person');
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.output, /non-noreply email/);
+  assert.match(result.output, /private absolute home path/);
+  assert.match(result.output, /unexpected author or committer name/);
+}));
+
+test('rejects private annotated tag messages and tagger metadata', () => withRepo((root) => {
+  writeFileSync(join(root, 'README.md'), 'clean\n');
+  execFileSync('git', ['add', 'README.md'], {cwd: root}); commit(root, 'initial');
+  execFileSync('git', ['-c', 'user.name=Other Person', '-c', `user.email=${['person', '@', 'example.com'].join('')}`, 'tag', '-a', 'v1', '-m', `private ${['/Users', 'person', 'project'].join('/')}`], {cwd: root});
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.output, /private absolute home path/);
+  assert.match(result.output, /unexpected author or committer name/);
+  assert.match(result.output, /tag objects=1/);
+}));
+
+test('an unborn repository works', () => withRepo((root) => {
+  writeFileSync(join(root, 'README.md'), 'clean\n');
+  const result = run(root);
+  assert.equal(result.status, 0, result.output);
 }));
