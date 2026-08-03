@@ -56,7 +56,44 @@ test('treats destination symlinks as collisions', () => {
   try {
     mkdirSync(join(f.home, '.agents', 'skills'), {recursive: true})
     symlinkSync(join(f.sourceRoot, 'skills', 'auto-pilot'), join(f.home, '.agents', 'skills', 'auto-pilot'))
-    assert.throws(() => install({sourceRoot: f.sourceRoot, home: f.home}), /refusing to replace/)
+    assert.throws(() => install({sourceRoot: f.sourceRoot, home: f.home}), /refusing symlink below selected home/)
+  } finally { f.cleanup() }
+})
+
+for (const [name, link] of [
+  ['.agents ancestor', '.agents'],
+  ['.codex ancestor', '.codex'],
+]) {
+  test(`rejects a symlinked ${name} before normal, dry-run, or force writes`, () => {
+    const f = fixture()
+    const outside = join(f.root, 'outside')
+    try {
+      mkdirSync(outside)
+      mkdirSync(f.home)
+      symlinkSync(outside, join(f.home, link))
+      for (const options of [{}, {dryRun: true}, {force: true}]) {
+        assert.throws(() => install({sourceRoot: f.sourceRoot, home: f.home, ...options}), /refusing symlink below selected home/)
+      }
+      assert.equal(existsSync(join(outside, 'skills', 'auto-pilot')), false)
+      assert.equal(existsSync(join(outside, 'agents')), false)
+    } finally { f.cleanup() }
+  })
+}
+
+test('rejects a symlinked backup ancestor before force replacement', () => {
+  const f = fixture()
+  const outside = join(f.root, 'outside')
+  try {
+    install({sourceRoot: f.sourceRoot, home: f.home})
+    writeFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'user content\n')
+    mkdirSync(outside)
+    symlinkSync(outside, join(f.home, '.codex-auto-pilot-backups'))
+    const config = join(f.home, '.codex', 'config.toml')
+    writeFileSync(config, 'model = "private-value"\n')
+    assert.throws(() => install({sourceRoot: f.sourceRoot, home: f.home, force: true}), /refusing unsafe directory below selected home/)
+    assert.equal(readFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'utf8'), 'user content\n')
+    assert.equal(readFileSync(config, 'utf8'), 'model = "private-value"\n')
+    assert.equal(existsSync(join(outside, '.agents')), false)
   } finally { f.cleanup() }
 })
 

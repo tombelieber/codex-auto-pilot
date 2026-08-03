@@ -21,6 +21,8 @@ Create this temporary JSON document. Extra evidence fields are allowed.
 }
 ```
 
-Successful receipts require an approved non-empty plan source, at least one passed criterion with evidence, only passed or not-applicable discovered checks with evidence, both final reviews passed with evidence, and no blockers. `pr_ready` requires an open/unmerged PR. `merged_main` requires a merged PR and merge SHA with `deploy_mechanism: none_detected`. `released` requires merged PR, passed release, migrations/backfills `passed` or `none`, and passed post-release checks. `blocked` requires at least one blocker with reason and evidence.
+Successful receipts require an approved non-empty plan source, at least one passed criterion and one check with evidence, both final reviews passed with evidence, and no blockers. Every delivery commit and merge SHA must be a 7-64 character hexadecimal Git id. PR and release URLs must be `http` or `https` URLs with a host.
+
+`pr_ready` requires an open/unmerged PR, a null merge SHA, and a fully not-applicable release record (`none_detected`, null URL, `none` migrations/backfills, and not-applicable post-release checks). `merged_main` requires a merged PR and valid merge SHA with that same not-applicable release record. `released` requires a merged PR, valid merge SHA, a non-empty detected deployment mechanism, passed release status, a valid release URL, migrations/backfills `passed` or `none`, and passed post-release checks. `blocked` requires at least one blocker with reason and evidence; it may omit unfinished delivery evidence.
 
 Render a compact summary: terminal state; PR/MR URL/status; plan; criteria passed/total; checks passed/discovered; both review statuses; release status/URL; and exact blockers.

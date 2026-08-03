@@ -31,6 +31,10 @@ function withRepo(fn) {
   }
 }
 
+function commit(root, message, email = 'safe@users.noreply.github.com') {
+  execFileSync('git', ['-c', 'user.name=Safe', '-c', `user.email=${email}`, 'commit', '--quiet', '-m', message], {cwd: root});
+}
+
 test('passes safe tracked and untracked files', () => withRepo((root) => {
   writeFileSync(join(root, 'README.md'), 'No telemetry. The word secret is ordinary documentation.\n');
   writeFileSync(join(root, '.env.example'), 'OPTIONAL_VALUE=\n');
@@ -69,4 +73,25 @@ test('rejects environment files, private-key names, emails, and symlinks', () =>
   assert.match(result.output, /private-key-like filename/);
   assert.match(result.output, /non-noreply email/);
   assert.match(result.output, /symlinks are not allowed/);
+}));
+
+test('rejects a secret deleted from the current tree', () => withRepo((root) => {
+  const key = ['sk', 'proj', '1234567890abcdefghijk'].join('-');
+  writeFileSync(join(root, 'old.txt'), key);
+  execFileSync('git', ['add', 'old.txt'], {cwd: root}); commit(root, 'add temporary file');
+  execFileSync('git', ['rm', '--quiet', 'old.txt'], {cwd: root}); commit(root, 'remove temporary file');
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.output, /OpenAI API key/);
+  assert.match(result.output, /commits=2/);
+}));
+
+test('rejects deleted private paths and non-noreply commit metadata', () => withRepo((root) => {
+  writeFileSync(join(root, '.env'), 'VALUE=1\n');
+  execFileSync('git', ['add', '-f', '.env'], {cwd: root}); commit(root, 'private env', ['person', '@', 'example.com'].join(''));
+  execFileSync('git', ['rm', '--quiet', '.env'], {cwd: root}); commit(root, 'remove env');
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.output, /environment files/);
+  assert.match(result.output, /author or committer email/);
 }));
