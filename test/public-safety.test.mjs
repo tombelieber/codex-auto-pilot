@@ -149,7 +149,7 @@ test('an unborn repository works', () => withRepo((root) => {
 }));
 
 test('rejects sensitive-looking working and historical path text without echoing it', () => withRepo((root) => {
-  const emailPath = ['contact-', 'person', '@', 'example.com.md'].join('');
+  const emailPath = ['contact-', 'person', '@', 'example.com.pem'].join('');
   const keyPath = ['sk', 'proj', '1234567890abcdefghijk'].join('-');
   writeFileSync(join(root, emailPath), 'clean\n');
   writeFileSync(join(root, keyPath), 'clean\n');

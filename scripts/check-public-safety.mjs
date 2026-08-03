@@ -30,10 +30,10 @@ function repositoryRoot(cwd) { return git(cwd, ['rev-parse', '--show-toplevel'])
 function hasHistory(root) { try { git(root, ['rev-parse', '--verify', '--quiet', 'HEAD']); return true } catch { return false } }
 function publicFiles(root) { return [...new Set(git(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).split('\0').filter(Boolean))].sort() }
 function addFinding(findings, file, reason) { findings.push(`${file}: ${reason}`) }
-function checkPath(findings, file) {
+function checkPath(findings, file, label) {
   const basename = file.split('/').at(-1)
-  if (basename.startsWith('.env') && !ALLOWED_ENV_FILES.has(basename)) addFinding(findings, file, 'environment files are not allowed')
-  if (PRIVATE_KEY_FILE.test(file)) addFinding(findings, file, 'private-key-like filename is not allowed')
+  if (basename.startsWith('.env') && !ALLOWED_ENV_FILES.has(basename)) addFinding(findings, label, 'environment files are not allowed')
+  if (PRIVATE_KEY_FILE.test(file)) addFinding(findings, label, 'private-key-like filename is not allowed')
 }
 function checkContent(findings, label, content) {
   const text = content.toString('utf8')
@@ -56,11 +56,12 @@ function scanWorkingTree(root, findings) {
     const absolute = resolve(root, file)
     if (!existsSync(absolute)) continue
     const stats = lstatSync(absolute); files += 1
-    checkPath(findings, file)
-    checkPathText(findings, 'working tree path', file)
-    if (stats.isSymbolicLink()) { addFinding(findings, file, 'symlinks are not allowed'); continue }
+    const label = `working tree entry ${files}`
+    checkPath(findings, file, label)
+    checkPathText(findings, label, file)
+    if (stats.isSymbolicLink()) { addFinding(findings, label, 'symlinks are not allowed'); continue }
     if (!stats.isFile()) continue
-    checkContent(findings, file, readFileSync(absolute))
+    checkContent(findings, label, readFileSync(absolute))
   }
   return files
 }
@@ -81,10 +82,11 @@ function scanHistory(root, findings) {
       if (separator < 0) throw new Error('git ls-tree returned an entry without a path separator')
       const header = entry.slice(0, separator); const path = entry.slice(separator + 1)
       const [mode, type, oid] = header.split(' ')
-      checkPath(findings, path)
-      checkPathText(findings, 'historical tree path', path)
+      const label = 'historical tree entry'
+      checkPath(findings, path, label)
+      checkPathText(findings, label, path)
       if (type === 'tree') { trees.add(oid); continue }
-      if (mode === '120000') { addFinding(findings, 'historical tree entry', 'historical symlinks are not allowed'); continue }
+      if (mode === '120000') { addFinding(findings, label, 'historical symlinks are not allowed'); continue }
       if (type === 'blob') {
         const paths = blobs.get(oid) || new Set(); paths.add(path); blobs.set(oid, paths)
       }
