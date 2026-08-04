@@ -13,10 +13,6 @@ function fixture() {
   mkdirSync(join(sourceRoot, 'skills', 'auto-pilot', 'nested'), {recursive: true})
   writeFileSync(join(sourceRoot, 'skills', 'auto-pilot', 'SKILL.md'), '# Auto Pilot\n')
   writeFileSync(join(sourceRoot, 'skills', 'auto-pilot', 'nested', 'rule.txt'), 'safe\n')
-  mkdirSync(join(sourceRoot, 'templates', 'agents'), {recursive: true})
-  for (const name of ['planner.toml', 'builder.toml', 'reviewer.toml', 'verifier.toml']) {
-    writeFileSync(join(sourceRoot, 'templates', 'agents', name), `name = "${name}"\n`)
-  }
   return {root, sourceRoot, home, cleanup: () => rmSync(root, {recursive: true, force: true})}
 }
 
@@ -24,20 +20,18 @@ test('dry-run writes nothing', () => {
   const f = fixture()
   try {
     const result = install({sourceRoot: f.sourceRoot, home: f.home, dryRun: true})
-    assert.equal(result.items.filter((item) => item.status === 'would install').length, 5)
+    assert.equal(result.items.filter((item) => item.status === 'would install').length, 1)
     assert.equal(existsSync(f.home), false)
   } finally { f.cleanup() }
 })
 
-test('installs default Codex destinations and four profiles', () => {
+test('installs only the skill', () => {
   const f = fixture()
   try {
     const result = install({sourceRoot: f.sourceRoot, home: f.home})
-    assert.equal(result.items.filter((item) => item.status === 'installed').length, 5)
+    assert.equal(result.items.filter((item) => item.status === 'installed').length, 1)
     assert.equal(readFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'utf8'), '# Auto Pilot\n')
-    for (const name of ['planner.toml', 'builder.toml', 'reviewer.toml', 'verifier.toml']) {
-      assert.equal(existsSync(join(f.home, '.codex', 'agents', name)), true)
-    }
+    assert.equal(existsSync(join(f.home, '.codex', 'agents')), false)
   } finally { f.cleanup() }
 })
 
@@ -60,58 +54,33 @@ test('treats destination symlinks as collisions', () => {
   } finally { f.cleanup() }
 })
 
-for (const [name, link] of [
-  ['.agents ancestor', '.agents'],
-  ['.codex ancestor', '.codex'],
-]) {
-  test(`rejects a symlinked ${name} before normal, dry-run, or force writes`, () => {
-    const f = fixture()
-    const outside = join(f.root, 'outside')
-    try {
-      mkdirSync(outside)
-      mkdirSync(f.home)
-      symlinkSync(outside, join(f.home, link))
-      for (const options of [{}, {dryRun: true}, {force: true}]) {
-        assert.throws(() => install({sourceRoot: f.sourceRoot, home: f.home, ...options}), /refusing symlink below selected home/)
-      }
-      assert.equal(existsSync(join(outside, 'skills', 'auto-pilot')), false)
-      assert.equal(existsSync(join(outside, 'agents')), false)
-    } finally { f.cleanup() }
-  })
-}
-
-test('rejects a symlinked backup ancestor before force replacement', () => {
+test('rejects a symlinked .agents ancestor before writes', () => {
   const f = fixture()
   const outside = join(f.root, 'outside')
   try {
-    install({sourceRoot: f.sourceRoot, home: f.home})
-    writeFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'user content\n')
     mkdirSync(outside)
-    symlinkSync(outside, join(f.home, '.codex-auto-pilot-backups'))
-    const config = join(f.home, '.codex', 'config.toml')
-    writeFileSync(config, 'model = "private-value"\n')
-    assert.throws(() => install({sourceRoot: f.sourceRoot, home: f.home, force: true}), /refusing unsafe directory below selected home/)
-    assert.equal(readFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'utf8'), 'user content\n')
-    assert.equal(readFileSync(config, 'utf8'), 'model = "private-value"\n')
-    assert.equal(existsSync(join(outside, '.agents')), false)
+    mkdirSync(f.home)
+    symlinkSync(outside, join(f.home, '.agents'))
+    for (const options of [{}, {dryRun: true}, {force: true}]) {
+      assert.throws(() => install({sourceRoot: f.sourceRoot, home: f.home, ...options}), /refusing symlink below selected home/)
+    }
+    assert.equal(existsSync(join(outside, 'skills', 'auto-pilot')), false)
   } finally { f.cleanup() }
 })
 
-test('force backs up each replaced destination before installing', () => {
+test('force backs up the replaced skill before installing', () => {
   const f = fixture()
   try {
     install({sourceRoot: f.sourceRoot, home: f.home})
     writeFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'user content\n')
-    writeFileSync(join(f.home, '.codex', 'agents', 'builder.toml'), 'user profile\n')
     const result = install({sourceRoot: f.sourceRoot, home: f.home, force: true})
     assert.ok(result.backupRoot)
     assert.equal(readFileSync(join(result.backupRoot, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'utf8'), 'user content\n')
-    assert.equal(readFileSync(join(result.backupRoot, '.codex', 'agents', 'builder.toml'), 'utf8'), 'user profile\n')
     assert.equal(readFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'utf8'), '# Auto Pilot\n')
   } finally { f.cleanup() }
 })
 
-test('repeat install skips identical managed content and never touches config.toml', () => {
+test('repeat install skips identical skill and never touches config.toml', () => {
   const f = fixture()
   try {
     mkdirSync(join(f.home, '.codex'), {recursive: true})
@@ -119,29 +88,19 @@ test('repeat install skips identical managed content and never touches config.to
     writeFileSync(config, 'model = "private-value"\n')
     install({sourceRoot: f.sourceRoot, home: f.home})
     const repeated = install({sourceRoot: f.sourceRoot, home: f.home})
-    assert.equal(repeated.items.filter((item) => item.status === 'skipped').length, 5)
+    assert.equal(repeated.items.filter((item) => item.status === 'skipped').length, 1)
     assert.equal(readFileSync(config, 'utf8'), 'model = "private-value"\n')
   } finally { f.cleanup() }
 })
 
-test('doctor reports current targets without reading config.toml', () => {
+test('doctor reports current or mismatched skill without reading config.toml', () => {
   const f = fixture()
   try {
     install({sourceRoot: f.sourceRoot, home: f.home})
-    const result = doctor({sourceRoot: f.sourceRoot, home: f.home})
-    assert.equal(result.items.length, 5)
-    assert.ok(result.items.every((item) => item.status === 'current'))
-    assert.equal(resolvePaths({sourceRoot: f.sourceRoot, home: f.home}).items.length, 5)
-  } finally { f.cleanup() }
-})
-
-test('doctor reports a corrupted target as mismatch', () => {
-  const f = fixture()
-  try {
-    install({sourceRoot: f.sourceRoot, home: f.home})
-    writeFileSync(join(f.home, '.codex', 'agents', 'builder.toml'), 'corrupt\n')
-    const result = doctor({sourceRoot: f.sourceRoot, home: f.home})
-    assert.equal(result.items.find((item) => item.name === 'profile:builder.toml').status, 'mismatch')
+    assert.equal(resolvePaths({sourceRoot: f.sourceRoot, home: f.home}).items.length, 1)
+    assert.equal(doctor({sourceRoot: f.sourceRoot, home: f.home}).items[0].status, 'current')
+    writeFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'corrupt\n')
+    assert.equal(doctor({sourceRoot: f.sourceRoot, home: f.home}).items[0].status, 'mismatch')
   } finally { f.cleanup() }
 })
 

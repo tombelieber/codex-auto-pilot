@@ -1,7 +1,7 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.1.0",
-  "description": "Safe installer for Codex Auto Pilot skills and agent profiles.",
+  "version": "0.2.0",
+  "description": "Safe installer for the minimal Codex Auto Pilot delivery skill.",
   "bin": {
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
   },
@@ -15,12 +15,11 @@
     ".codex-plugin/",
     "lib/",
     "skills/",
-    "templates/agents/",
     "install.sh",
     "README.md",
     "LICENSE"
   ],
-  "keywords": ["codex", "agent", "automation", "skills"],
+  "keywords": ["codex", "automation", "delivery", "skills"],
   "homepage": "https://github.com/tombelieber/codex-auto-pilot#readme",
   "bugs": {"url": "https://github.com/tombelieber/codex-auto-pilot/issues"},
   "repository": {"type": "git", "url": "git+https://github.com/tombelieber/codex-auto-pilot.git"},

@@ -28,7 +28,6 @@ async function main(argv) {
   if (command === 'doctor') {
     const result = doctor({sourceRoot: packageRoot})
     for (const item of result.items) console.log(`${item.status} ${item.destination}`)
-    console.log('global concurrency: optional (not read)')
     return result.items.every((item) => item.status === 'current') ? undefined : (process.exitCode = 1)
   }
   throw new Error(`unknown command: ${command}`)
@@ -53,6 +52,6 @@ Usage:
   codex-auto-pilot skill-path
   codex-auto-pilot --version
 
-Install copies the Auto Pilot skill and four named agent profiles. It never edits .codex/config.toml.
+Install copies only the Auto Pilot skill. It never installs agent profiles or edits .codex/config.toml.
 Set CODEX_AUTO_PILOT_HOME to use an isolated Codex home.`)
 }

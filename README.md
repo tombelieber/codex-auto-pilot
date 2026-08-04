@@ -1,104 +1,92 @@
 # codex-auto-pilot
 
-Turn an approved Codex plan or design spec into audited Git pull requests.
-
-`codex-auto-pilot` is for **Codex**. Give it an approved, concrete plan, then explicitly invoke `$auto-pilot`. It creates isolated worktrees, keeps an audit record in the PR, and defaults to delivery through a pull request.
+Turn one approved software goal, plan, or design spec into a delivered pull request or release with Codex.
 
 ```text
-$auto-pilot implement the approved plan in docs/approved-plan.md
+$auto-pilot docs/approved-plan.md
 ```
+
+Auto Pilot is deliberately small. It gives the active Sol agent an outcome and authority contract, then lets the model choose the simplest reliable way to implement, verify, and deliver the work from current repository truth.
 
 ## What it does
 
-1. Treats your approved plan/design spec as the input—not a vague feature request.
-2. Uses up to five concurrent writers in isolated worktrees. The default implementer tier is Terra at medium reasoning for cost-effective execution.
-3. Asks independent Sol reviewers at xhigh reasoning to review the resulting changes.
-4. Opens a PR by default, including the work and audit trail. Nothing is automatically released or shipped by this default mode.
+1. Treats a complete, approved artifact as the implementation input.
+2. Refreshes repository truth and preserves unrelated user work.
+3. Implements and verifies the complete scope using the repository's own conventions.
+4. Commits, pushes, and opens a production-ready PR by default.
+5. Merges and releases only when the same invocation explicitly authorizes it.
 
-Use an explicit release/auto-ship instruction only when you want an approved PR merged and the repository's release mechanism invoked. Auto-merge means GitHub merges the passing PR; auto-release means the repository's configured release workflow is triggered after that merge. It does not invent a deploy mechanism.
+It does **not** prescribe agent teams, model routing, parallel waves, ticket graphs, mandatory reviewers, review loops, or worktree fleets. Codex may still use tools or subagents when they materially help; that is an execution decision, not a skill requirement.
 
 ## Install
 
-Choose one installation level. All examples pin the immutable `v0.1.0` release.
-
-### Plugin install: skill only
-
-Install the plugin when Codex only needs the `$auto-pilot` skill. This does **not** add the four custom agent profiles. The skill uses its direct-spawn fallback when those profiles are absent.
+### Codex plugin
 
 ```bash
 codex plugin marketplace add tombelieber/tomstack
 codex plugin add codex-auto-pilot@tomstack
 ```
 
-The `tomstack` marketplace entry pins the plugin to the `v0.1.0` Git ref.
-
-### Full CLI install: skill plus four agent profiles
-
-Use the CLI installer when you also want the four custom agent profiles installed locally.
+### CLI installer
 
 ```bash
-npx github:tombelieber/codex-auto-pilot#v0.1.0 install
+npx github:tombelieber/codex-auto-pilot install
 ```
 
-Or use the pinned installer:
+Or:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tombelieber/codex-auto-pilot/v0.1.0/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/tombelieber/codex-auto-pilot/main/install.sh | sh
 ```
 
-Preview an install before it changes anything:
+Preview or verify an installation:
 
 ```bash
-npx github:tombelieber/codex-auto-pilot#v0.1.0 install --dry-run
+npx github:tombelieber/codex-auto-pilot install --dry-run
+npx github:tombelieber/codex-auto-pilot doctor
 ```
 
-Useful installer controls:
+Use `install --force` only to replace an existing Auto Pilot skill; the installer backs up replaced content first. The installer copies only the skill. It does not install custom agent profiles, change Codex concurrency, or edit `.codex/config.toml`.
 
-```bash
-# Replace an existing Auto Pilot installation (a backup is made first).
-npx github:tombelieber/codex-auto-pilot#v0.1.0 install --force
+## Delivery modes
 
-# Check the installed skill, profiles, and command wiring.
-npx github:tombelieber/codex-auto-pilot#v0.1.0 doctor
+PR mode is the default:
+
+```text
+$auto-pilot docs/approved-plan.md
 ```
 
-The installer does not modify Codex concurrency settings. If you want more session capacity and understand the resource cost, add this optional setting yourself:
+It stops with an open, unmerged, production-ready PR and no production mutation.
 
-```toml
-[agents]
-max_concurrent_threads_per_session = 20
+Release mode requires an explicit imperative in the same invocation:
+
+```text
+$auto-pilot docs/approved-plan.md release
 ```
 
-## Use it
+It completes PR delivery, merges through the repository's normal protected path, uses the discovered release mechanism, handles approved migrations or backfills, and verifies the post-release surface. If the repository has no release mechanism, it stops after merging.
 
-1. Write and approve a bounded implementation plan or design spec.
-2. Start Codex in the target Git repository.
-3. Invoke `$auto-pilot` and point to the approved artifact.
-4. Review the PR, its checks, and its audit record before merging.
-
-PR mode is the default. Ask explicitly for auto-merge or release only after you are comfortable with the plan, repository checks, and release consequences.
+Auto Pilot reports one terminal state: `pr_ready`, `merged_main`, `released`, or `blocked`. Its small completion receipt records plan, Git, criteria, checks, PR/release evidence, and blockers without recording or constraining orchestration choices.
 
 ## Privacy and safety
 
 - No telemetry is collected.
-- No plan, code, repository data, or other user data is uploaded by this project.
-- No credentials are included; provide required repository credentials through your normal local/GitHub setup.
-- The public GitHub handle `tombelieber` is intentionally present. Personal names, email addresses, private filesystem paths, and internal strategy are not part of this distribution.
+- No plan, code, or repository data is uploaded by this project.
+- No credentials are bundled; normal local and repository authentication applies.
+- The public GitHub handle `tombelieber` is intentionally present.
 
-`npm run check` includes a public-safety check that rejects common credential material, private home paths, non-noreply email addresses, `.env` files, private keys, and symlinks in the distributable tree.
+`npm run check` scans the distributable tree and Git history for common credentials, private home paths, non-noreply email addresses, environment files, private keys, and symlinks.
 
 ## Limits
 
-- This delivers software through Git and GitHub PRs; it does not perform non-software operational work.
-- Plan approval authorizes intent, not stale repository truth. Reviewers and deterministic checks must still validate current code, tests, and constraints.
-- Migrations and backfills use the target repository's mechanism; Auto Pilot does not create a universal data-change runner.
-- If a repository has no deploy/release mechanism, an explicit release request ends at a merged `main` branch.
-- Model availability and supported reasoning tiers vary by account and runtime.
-- Deterministic repository checks outrank model review.
+- The supplied artifact must already contain the product decisions and acceptance criteria needed for implementation.
+- Repository instructions, deterministic checks, branch protection, and production safety still apply.
+- Auto Pilot does not invent a deployment, migration, backfill, or rollback mechanism when the repository has none.
+- Model and tool availability depend on the active Codex runtime.
 
 ## Contributing and security
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for a focused contribution path and [SECURITY.md](SECURITY.md) to report a vulnerability.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 ## License
 

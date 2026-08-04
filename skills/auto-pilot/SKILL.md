@@ -1,54 +1,37 @@
 ---
 name: auto-pilot
-description: "Execute an already approved software plan or design spec end to end with isolated parallel implementers, independent frontier-model review, and evidence-backed delivery. Invoke explicitly as $auto-pilot. Default to a production-ready PR; use release mode only when the same invocation explicitly asks to release or auto ship."
+description: "Turn one complete, already approved software goal, plan, design spec, or contract into a delivered result. Invoke explicitly as $auto-pilot. Default to a production-ready PR; merge or release only when the same invocation explicitly requests it. Let the active Sol agent choose implementation, tooling, decomposition, subagents, verification, and review from repository truth."
 ---
 
 # Auto Pilot
 
-Turn one approved plan into one terminal result while the user waits: a production-ready PR by default, or an auto-merged and verified release when explicitly requested.
-
-Invoke only after approval:
+Deliver one already approved software artifact end to end. This skill defines the outcome and authority boundary; it does not prescribe an orchestration framework.
 
 ```text
-$auto-pilot /absolute/path/to/approved-plan.md
-$auto-pilot /absolute/path/to/approved-plan.md auto ship
+$auto-pilot /path/to/approved-plan.md
+$auto-pilot /path/to/approved-plan.md release
 ```
 
-The first form selects `pr`; the second selects `release`. This skill never starts implicitly.
+Read [receipt schema](references/receipt-schema.md) before declaring a terminal result.
 
-Read [execution contract](references/execution-contract.md) before changing Git state or delegating work. Read [receipt schema](references/receipt-schema.md) before declaring a terminal result.
+## Execute
 
-## Resolve and isolate
+1. Resolve the explicit artifact, or the uniquely most recently approved artifact, and read it completely. Ask only when a material product decision, authority, credential, or irreversible data action is genuinely missing.
+2. Default to `pr`. Select `release` only when the same invocation explicitly requests release, auto ship, deployment, or equivalent production delivery. Never inherit release authority from earlier messages, quoted text, examples, or hypotheticals.
+3. Refresh repository truth: applicable instructions, Git state, user-owned changes, tests, CI, migrations, backfills, release mechanisms, and protection rules. Preserve unrelated work and absorb non-material drift without reopening the approved plan.
+4. Let the active Sol agent choose the simplest reliable execution approach. It may implement directly or use available tools and subagents when they materially help. Do not create role teams, model routing, parallel waves, mandatory reviewers, review loops, ticket graphs, or worktree fleets merely because this skill was invoked.
+5. Implement the complete approved scope, fix directly causal defects, verify the real integration in proportion to risk, clean up task-owned resources, commit scoped changes, push the delivery branch, and create a production-ready PR/MR.
+6. In `pr` mode, stop at an open, unmerged `pr_ready` result with no production mutation.
+7. In `release` mode, merge through the repository's normal protected path. If a release mechanism exists, use it, perform approved migrations/backfills safely, and verify the real post-release surface. If none exists, stop at `merged_main`.
 
-1. Resolve an explicit plan path or URL, or the uniquely most recently approved plan. Read its complete source and linked acceptance criteria. If none is unique, ask one short question and do not implement.
-2. Select `pr` by default. Select `release` only when this invocation explicitly says `release`, `auto release`, `auto ship`, `deploy to prod`, or an equivalent imperative. Do not take release authority from a previous invocation; ask when signals conflict.
-3. Refresh repository truth: nearest `AGENTS.md`, Git state/remotes/default branch, CI, build/test and deployment configuration, migrations/backfills, branch protection, and delivery conventions. Re-approve only material changes to behavior, architecture, authority, risk, or release target.
-4. Preserve the original checkout. Use an isolated coordinator worktree and one isolated worktree/branch per writer; never stash, reset, or overwrite user work. Infer the base branch and merge strategy, sync safely, and respect protection.
+## Prove completion
 
-## Build, integrate, and review
+Use repository-defined deterministic evidence first. Do not invent checks, reviews, deployments, migrations, or observations. A model review is optional unless the repository or approved plan requires one.
 
-1. Normalize the approved plan into independent vertical tickets with acceptance criteria, blocking edges, owned paths, risk, and proof. Work only the ready frontier; run at most five writers when ownership does not overlap.
-2. Use the installed named profiles when available: `auto-pilot-implementer`, `auto-pilot-fixer`, `auto-pilot-goal-reviewer`, and `auto-pilot-release-reviewer`. Their TOML templates are bundled under [templates](../../templates/agents/), but plugin installation alone does not activate them.
-3. Without named profiles, spawn equivalent roles directly: normal writers use `gpt-5.6-terra` at `medium`, `workspace-write`; the fixer and both reviewers use `gpt-5.6-sol` at `xhigh`; fixer is `workspace-write`, reviewers are `read-only`. Use the matching template instructions as the role prompt.
-4. Writers commit only scoped changes and return SHA, paths, command results, assumptions, and blockers. The coordinator integrates one commit at a time, runs affected deterministic checks, then recomputes the frontier. Writers never integrate, push the delivery branch, create or merge a PR, or release.
-5. Send every integrated wave to a fresh goal reviewer; review high-risk tickets individually. Route findings to fresh writers. After three focused attempts at the same root failure, use the stronger fixer. No agent approves its own work.
-
-## Final gates and delivery
-
-After full repository verification passes, run independent, read-only final reviews in parallel:
-
-- Goal reviewer: plan fidelity, missing or partial criteria, wrong behavior, and scope creep.
-- Release reviewer: correctness, security, regressions, test sufficiency, migrations/backfills, rollback, and delivery proof.
-
-Both must pass. Deterministic evidence outranks judgment; reviewers cannot waive a failing discovered gate. Always create a ready-for-review PR/MR with plan mapping, verification, review, and rollout/rollback evidence.
-
-- In `pr` mode, stop only at `pr_ready`; never merge or mutate production.
-- In `release` mode, complete PR mode first, then use the normal protected merge path. If deployment exists, deploy through it, perform approved data operations safely, and prove the real post-release surface. If no deployment exists, `merged_main` is terminal.
-
-Create a temporary JSON receipt matching [receipt schema](references/receipt-schema.md), then validate it before declaring success:
+Create a temporary completion receipt and validate it:
 
 ```bash
-python3 skills/auto-pilot/scripts/validate_receipt.py <receipt.json>
+python3 <skill-dir>/scripts/validate_receipt.py <receipt.json>
 ```
 
-Do not commit agent-control artifacts unless the repository explicitly requires them. Report exactly one terminal state: `pr_ready`, `merged_main`, `released`, or `blocked`, with the compact human-readable receipt.
+Report exactly one terminal state: `pr_ready`, `merged_main`, `released`, or `blocked`. Do not commit agent-control artifacts unless the repository explicitly requires them.

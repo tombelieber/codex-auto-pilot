@@ -1,28 +1,45 @@
 # Completion Receipt
 
-Create this temporary JSON document. Extra evidence fields are allowed.
+Create a temporary JSON document with this version 3 shape. It records delivery evidence, not orchestration choices.
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "mode": "pr",
   "terminal_state": "pr_ready",
-  "plan": { "source": "docs/plans/example.md", "approved": true },
-  "git": { "base_branch": "main", "delivery_branch": "auto-pilot/example", "commits": ["abc1234"] },
-  "criteria": [{ "id": "AC-1", "status": "passed", "evidence": "test and runtime evidence" }],
-  "checks": [{ "name": "test", "status": "passed", "evidence": "command or CI URL" }],
-  "reviews": {
-    "goal_spec": { "status": "passed", "evidence": "review agent result" },
-    "engineering_release": { "status": "passed", "evidence": "review agent result" }
+  "plan": { "source": "docs/approved-plan.md", "approved": true },
+  "summary": "Implemented the approved scope and opened a verified PR.",
+  "git": {
+    "base_branch": "main",
+    "delivery_branch": "feature/example",
+    "commits": ["abc1234"]
   },
-  "pull_request": { "url": "https://host/owner/repo/pull/1", "status": "open", "merged": false, "merge_sha": null },
-  "release": { "deploy_mechanism": "none_detected", "status": "not_applicable", "url": null, "migrations": "none", "backfills": "none", "post_release_checks": "not_applicable", "deployment_evidence": "Repository inspection found no deploy mechanism", "migrations_evidence": "No migrations apply because no deployment exists", "backfills_evidence": "No backfills apply because no deployment exists", "post_release_evidence": "No post-release check applies because no deployment exists" },
+  "criteria": [
+    { "id": "AC-1", "status": "passed", "evidence": "Observed behavior or deterministic check" }
+  ],
+  "checks": [
+    { "name": "test", "status": "passed", "evidence": "Command, CI URL, or runtime result" }
+  ],
+  "pull_request": {
+    "url": "https://host/owner/repo/pull/1",
+    "status": "open",
+    "merged": false,
+    "merge_sha": null
+  },
+  "release": {
+    "status": "not_requested",
+    "url": null,
+    "evidence": "PR mode; production was not changed"
+  },
   "blockers": []
 }
 ```
 
-Successful receipts require an approved non-empty plan source, at least one passed criterion and one check with evidence, both final reviews passed with evidence, and no blockers. Every delivery commit and merge SHA must be a 7-64 character hexadecimal Git id. PR and release URLs must be `http` or `https` URLs with a host.
+Successful receipts require an approved plan, non-empty summary, at least one commit, one passed criterion, one evidenced check, a valid PR/MR URL, and no blockers.
 
-Every release record must include non-empty `deployment_evidence`, `migrations_evidence`, `backfills_evidence`, and `post_release_evidence`. Evidence is required even when an operation is `none`: explain why it is not applicable. `pr_ready` requires an open/unmerged PR, a null merge SHA, and a fully not-applicable release record (`none_detected`, null URL, `none` migrations/backfills, and not-applicable post-release checks). `merged_main` requires a merged PR and valid merge SHA with that same not-applicable release record; its deployment evidence must state that repository inspection found no deploy mechanism. `released` requires a merged PR, valid merge SHA, a non-empty detected deployment mechanism, passed release status, a valid release URL, migrations/backfills `passed` or `none`, and passed post-release checks with real post-release evidence. `blocked` requires at least one blocker with reason and evidence. It may omit Git, criteria, checks, reviews, PR, and release sections entirely; if it includes any of them, that section must be structurally valid.
+- `pr_ready`: mode `pr`; PR is open or ready, unmerged, and release status is `not_requested`.
+- `merged_main`: mode `release`; PR is merged with a merge SHA, no deployment mechanism exists, and release status is `no_mechanism`.
+- `released`: mode `release`; PR is merged, release status is `passed`, a release URL exists, and post-release evidence is included in `checks` and `release.evidence`.
+- `blocked`: at least one blocker with `reason` and `evidence`; delivery sections may be omitted.
 
-Render a compact summary: terminal state; PR/MR URL/status; plan; criteria passed/total; checks passed/discovered; both review statuses; release status/URL; and exact blockers.
+Record migrations, backfills, E2E, rollout, rollback, and post-release verification as normal `checks` when applicable. Extra evidence fields are allowed. Do not add model names, agent counts, reviewer identities, orchestration strategies, effort routing, or parallelism requirements.

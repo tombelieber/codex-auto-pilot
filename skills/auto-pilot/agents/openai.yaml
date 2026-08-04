@@ -1,6 +1,6 @@
 interface:
   display_name: "Auto Pilot"
-  short_description: "Execute an approved plan into a verified PR or release"
-  default_prompt: "Use $auto-pilot to execute my approved plan and deliver a production-ready PR by default."
+  short_description: "Deliver an approved plan as a verified PR or release"
+  default_prompt: "Use $auto-pilot to turn my approved plan into a production-ready PR."
 policy:
   allow_implicit_invocation: false
