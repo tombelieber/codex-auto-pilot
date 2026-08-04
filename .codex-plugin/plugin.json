@@ -1,6 +1,6 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Deliver approved software plans as evidence-backed PRs or releases.",
   "author": { "name": "tombelieber", "url": "https://github.com/tombelieber" },
   "homepage": "https://github.com/tombelieber/codex-auto-pilot",
@@ -8,6 +8,7 @@
   "license": "MIT",
   "keywords": ["automation", "delivery", "plans", "git"],
   "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Codex Auto Pilot",
     "shortDescription": "Turn an approved plan into a verified PR or release",

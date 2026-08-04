@@ -4,7 +4,10 @@ import test from 'node:test'
 
 const intended = [
   '.codex-plugin/plugin.json', 'LICENSE', 'README.md', 'bin/codex-auto-pilot.mjs', 'install.sh', 'lib/installer.mjs', 'package.json',
-  'skills/auto-pilot/SKILL.md', 'skills/auto-pilot/agents/openai.yaml', 'skills/auto-pilot/references/receipt-schema.md', 'skills/auto-pilot/scripts/validate_receipt.py',
+  'hooks/hooks.json', 'lib/hooks-installer.mjs',
+  'skills/auto-pilot/SKILL.md', 'skills/auto-pilot/agents/openai.yaml', 'skills/auto-pilot/references/history-schema.md',
+  'skills/auto-pilot/references/receipt-schema.md', 'skills/auto-pilot/scripts/collect_history.mjs',
+  'skills/auto-pilot/scripts/history.mjs', 'skills/auto-pilot/scripts/validate_receipt.py',
 ].sort()
 
 test('npm pack contains exactly the intended minimal public files', () => {

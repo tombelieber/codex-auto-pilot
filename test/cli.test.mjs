@@ -12,9 +12,9 @@ function run(args, env = {}) {
 }
 
 test('version, help, and skill-path are available without installation', () => {
-  assert.equal(run(['--version']).stdout.trim(), '0.2.0')
-  assert.match(run(['help']).stdout, /install \[--dry-run\] \[--force\]/)
-  assert.match(run(['help']).stdout, /copies only the Auto Pilot skill/)
+  assert.equal(run(['--version']).stdout.trim(), '0.3.0')
+  assert.match(run(['help']).stdout, /install \[--dry-run\] \[--force\] \[--with-local-history\]/)
+  assert.match(run(['help']).stdout, /passive user-level Codex hooks/)
   assert.match(run(['skill-path']).stdout.trim(), /skills\/auto-pilot$/)
 })
 
@@ -25,4 +25,28 @@ test('doctor distinguishes missing targets and exits nonzero', () => {
     assert.equal(result.status, 1)
     assert.match(result.stdout, /missing /)
   } finally { rmSync(home, {recursive: true, force: true}) }
+})
+
+test('doctor checks opted-in local history hooks', () => {
+  const home = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-cli-hooks-'))
+  try {
+    const env = {CODEX_AUTO_PILOT_HOME: home}
+    assert.equal(run(['install', '--with-local-history'], env).status, 0)
+    const result = run(['doctor', '--with-local-history'], env)
+    assert.equal(result.status, 0)
+    assert.match(result.stdout, new RegExp(`current ${home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\/.codex\\/hooks\\.json`))
+  } finally { rmSync(home, {recursive: true, force: true}) }
+})
+
+test('history status and retention use an isolated local data directory', () => {
+  const data = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-history-cli-'))
+  try {
+    const env = {CODEX_AUTO_PILOT_DATA: data}
+    const initial = JSON.parse(run(['history', 'status'], env).stdout)
+    assert.equal(initial.runs, 0)
+    assert.equal(initial.retention, 90)
+    const updated = JSON.parse(run(['history', 'retention', '30'], env).stdout)
+    assert.equal(updated.raw_retention_days, 30)
+    assert.equal(JSON.parse(run(['history', 'report', '--since', '30d'], env).stdout).runs, 0)
+  } finally { rmSync(data, {recursive: true, force: true}) }
 })

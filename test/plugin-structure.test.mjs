@@ -11,7 +11,21 @@ test('Auto Pilot is explicit-only and exposes a valid skill path', async () => {
   const agent = await read('skills/auto-pilot/agents/openai.yaml')
   assert.equal(manifest.name, 'codex-auto-pilot')
   assert.equal(manifest.skills, './skills/')
+  assert.equal(manifest.hooks, './hooks/hooks.json')
   assert.match(agent, /allow_implicit_invocation:\s*false/)
+})
+
+test('plugin hooks collect lifecycle evidence without adding model context', async () => {
+  const hooks = JSON.parse(await read('hooks/hooks.json'))
+  assert.deepEqual(Object.keys(hooks.hooks).sort(), ['SessionEnd', 'Stop', 'SubagentStop', 'UserPromptSubmit'].sort())
+  for (const groups of Object.values(hooks.hooks)) {
+    for (const group of groups) {
+      for (const hook of group.hooks) {
+        assert.match(hook.command, /collect_history\.mjs/)
+        assert.doesNotMatch(JSON.stringify(hook), /additionalContext|decision/)
+      }
+    }
+  }
 })
 
 test('skill leaves execution strategy to Sol and keeps only delivery evidence', async () => {

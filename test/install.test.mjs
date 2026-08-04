@@ -13,6 +13,8 @@ function fixture() {
   mkdirSync(join(sourceRoot, 'skills', 'auto-pilot', 'nested'), {recursive: true})
   writeFileSync(join(sourceRoot, 'skills', 'auto-pilot', 'SKILL.md'), '# Auto Pilot\n')
   writeFileSync(join(sourceRoot, 'skills', 'auto-pilot', 'nested', 'rule.txt'), 'safe\n')
+  mkdirSync(join(sourceRoot, 'skills', 'auto-pilot', 'scripts'))
+  writeFileSync(join(sourceRoot, 'skills', 'auto-pilot', 'scripts', 'collect_history.mjs'), 'process.stdout.write("{}\\n")\n')
   return {root, sourceRoot, home, cleanup: () => rmSync(root, {recursive: true, force: true})}
 }
 
@@ -113,4 +115,34 @@ test('CODEX_AUTO_PILOT_HOME overrides the selected home', () => {
     if (original === undefined) delete process.env.CODEX_AUTO_PILOT_HOME
     else process.env.CODEX_AUTO_PILOT_HOME = original
   }
+})
+
+test('local history opt-in preserves existing hooks and installs all lifecycle events', () => {
+  const f = fixture()
+  try {
+    mkdirSync(join(f.home, '.codex'), {recursive: true})
+    const hooksPath = join(f.home, '.codex', 'hooks.json')
+    writeFileSync(hooksPath, JSON.stringify({hooks: {PreToolUse: [{hooks: [{type: 'command', command: 'safe-existing-hook'}]}]}}))
+    const result = install({sourceRoot: f.sourceRoot, home: f.home, withLocalHistory: true})
+    const hooks = JSON.parse(readFileSync(hooksPath, 'utf8'))
+    assert.equal(result.items.at(-1).status, 'installed')
+    assert.ok(result.backupRoot)
+    assert.equal(hooks.hooks.PreToolUse[0].hooks[0].command, 'safe-existing-hook')
+    for (const event of ['UserPromptSubmit', 'SubagentStop', 'Stop', 'SessionEnd']) {
+      assert.match(hooks.hooks[event][0].hooks[0].command, /\.agents\/skills\/auto-pilot\/scripts\/collect_history\.mjs/)
+    }
+    assert.equal(doctor({sourceRoot: f.sourceRoot, home: f.home, withLocalHistory: true}).items.at(-1).status, 'current')
+  } finally { f.cleanup() }
+})
+
+test('local history dry-run rejects a symlinked .codex ancestor', () => {
+  const f = fixture()
+  const outside = join(f.root, 'outside-hooks')
+  try {
+    mkdirSync(f.home)
+    mkdirSync(outside)
+    symlinkSync(outside, join(f.home, '.codex'))
+    assert.throws(() => install({sourceRoot: f.sourceRoot, home: f.home, withLocalHistory: true, dryRun: true}), /refusing symlink/)
+    assert.equal(existsSync(join(outside, 'hooks.json')), false)
+  } finally { f.cleanup() }
 })

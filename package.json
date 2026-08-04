@@ -1,18 +1,19 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.2.0",
-  "description": "Safe installer for the minimal Codex Auto Pilot delivery skill.",
+  "version": "0.3.0",
+  "description": "Minimal Codex Auto Pilot delivery skill with optional local run history.",
   "bin": {
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
   },
   "scripts": {
-    "check": "node --check bin/*.mjs && node --check lib/*.mjs && node --check scripts/*.mjs && node --check test/*.mjs && node --test && node scripts/check-public-safety.mjs && npm run pack:dry",
+    "check": "node --check bin/*.mjs && node --check lib/*.mjs && node --check scripts/*.mjs && node --check skills/auto-pilot/scripts/*.mjs && node --check test/*.mjs && node --test && node scripts/check-public-safety.mjs && npm run pack:dry",
     "test": "node --test",
     "pack:dry": "npm pack --dry-run --json"
   },
   "files": [
     "bin/",
     ".codex-plugin/",
+    "hooks/",
     "lib/",
     "skills/",
     "install.sh",
