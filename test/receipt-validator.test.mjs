@@ -7,28 +7,40 @@ import test from 'node:test'
 import {fileURLToPath} from 'node:url'
 
 const validator = resolve(fileURLToPath(new URL('../skills/auto-pilot/scripts/validate_receipt.py', import.meta.url)))
-const sha = 'a'.repeat(40)
+const headSha = 'a'.repeat(40)
+const baseSha = 'b'.repeat(40)
+const mergeSha = 'c'.repeat(40)
 
 function receipt(state = 'pr_ready') {
   const released = state === 'released'
   const merged = state === 'merged_main' || released
-  return {
-    schema_version: 3,
+  const value = {
+    schema_version: 4,
     mode: merged ? 'release' : 'pr',
     terminal_state: state,
     plan: {source: 'docs/plan.md', approved: true},
     summary: 'Implemented and verified the approved plan.',
-    git: {base_branch: 'main', delivery_branch: 'feature/test', commits: [sha]},
+    git: {base_branch: 'main', delivery_branch: 'feature/test', commits: [headSha]},
     criteria: [{id: 'AC-1', status: 'passed', evidence: 'Observed behavior'}],
     checks: [{name: released ? 'post-release E2E' : 'test', status: 'passed', evidence: 'Command or runtime evidence'}],
-    pull_request: {url: 'https://github.com/owner/repo/pull/1', status: merged ? 'merged' : 'open', merged, merge_sha: merged ? sha : null},
+    pull_request: {url: 'https://github.com/owner/repo/pull/1', status: merged ? 'merged' : 'open', merged, merge_sha: merged ? mergeSha : null},
     release: released
       ? {status: 'passed', url: 'https://github.com/owner/repo/releases/tag/v1', evidence: 'Production deployment and post-release E2E passed'}
       : merged
         ? {status: 'no_mechanism', url: null, evidence: 'Repository has no deployment mechanism'}
-        : {status: 'not_requested', url: null, evidence: 'PR mode; production was not changed'},
+        : {status: 'not_requested', url: null, evidence: 'PR stage; production was not changed'},
     blockers: [],
   }
+  if (merged) {
+    value.promotion = {
+      source: 'live_pr',
+      source_receipt: null,
+      candidate_base_sha: baseSha,
+      candidate_head_sha: headSha,
+      authority_evidence: 'Explicit current invocation: $auto-pilot release PR #1',
+    }
+  }
+  return value
 }
 
 function run(value) {
@@ -66,7 +78,7 @@ test('accepts a minimal blocked receipt', () => {
 })
 
 for (const [name, mutate] of [
-  ['legacy schema', (value) => { value.schema_version = 2 }],
+  ['legacy schema', (value) => { value.schema_version = 3 }],
   ['missing summary', (value) => { value.summary = '' }],
   ['null commit', (value) => { value.git.commits = [null] }],
   ['failed criterion', (value) => { value.criteria[0].status = 'failed' }],
@@ -82,7 +94,25 @@ for (const [name, mutate] of [
 
 test('rejects production mutation in PR mode receipt', () => {
   const value = receipt()
-  value.pull_request = {url: 'https://github.com/owner/repo/pull/1', status: 'merged', merged: true, merge_sha: sha}
+  value.pull_request = {url: 'https://github.com/owner/repo/pull/1', status: 'merged', merged: true, merge_sha: mergeSha}
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects release without fresh promotion evidence', () => {
+  const value = receipt('released')
+  delete value.promotion
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects promotion evidence in PR mode', () => {
+  const value = receipt()
+  value.promotion = receipt('released').promotion
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects release candidate not bound to commits', () => {
+  const value = receipt('released')
+  value.promotion.candidate_head_sha = 'd'.repeat(40)
   assert.equal(run(value).status, 1)
 })
 
