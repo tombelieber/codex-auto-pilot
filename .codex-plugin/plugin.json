@@ -1,7 +1,7 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.5.0",
-  "description": "Deliver approved plans through a minimal-context PR stage and a separately authorized release stage.",
+  "version": "0.6.0",
+  "description": "Deliver approved plans through a minimal-context PR stage and optionally auto-start a fresh release task.",
   "author": { "name": "tombelieber", "url": "https://github.com/tombelieber" },
   "homepage": "https://github.com/tombelieber/codex-auto-pilot",
   "repository": "https://github.com/tombelieber/codex-auto-pilot",
@@ -11,13 +11,13 @@
   "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Codex Auto Pilot",
-    "shortDescription": "Build a verified PR with at most one handoff, then promote separately",
-    "longDescription": "Uses one canonical Sol PR controller, at most one fresh Terra implementation session, one compact handoff, and a separate fresh Sol release boundary.",
+    "shortDescription": "Build a verified PR and optionally auto-start its fresh release task",
+    "longDescription": "Uses one canonical Sol PR controller, at most one fresh Terra implementation session, one compact handoff, and an optional one-command ship lane that starts a separate Sol release task after PR readiness.",
     "developerName": "tombelieber",
     "category": "Productivity",
     "capabilities": ["Write", "Git", "Release"],
     "websiteURL": "https://github.com/tombelieber/codex-auto-pilot",
-    "defaultPrompt": ["$auto-pilot pr <approved-plan-path>. Prepare a production-ready PR and stop before merge or production mutation."],
+    "defaultPrompt": ["$auto-pilot pr <approved-plan-path>. Use ship instead when I explicitly want Auto Pilot to create a fresh release task immediately after the PR becomes ready."],
     "brandColor": "#2563EB"
   }
 }

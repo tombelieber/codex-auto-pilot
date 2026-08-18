@@ -1,6 +1,6 @@
 ---
 name: auto-pilot
-description: "Deliver one approved software goal through a production-ready PR or a separately authorized production promotion. Invoke explicitly with $auto-pilot at the start of the prompt. Keep each PR to one active Sol controller and at most one fresh Terra implementation task; never add prep, status, reviewer, or repair agent stages. Use deterministic repository harnesses for mechanical work, one compact Git-backed handoff, one consolidated Sol review, and a fresh Sol release invocation for production promotion."
+description: "Deliver one approved software goal through a production-ready PR and, when explicitly requested, automatically continue in one fresh production-release task. Invoke explicitly with $auto-pilot at the start of the prompt. Use pr for PR-only delivery, ship or a clear current release imperative for automatic PR-to-release continuation, and release for an existing PR. Keep one Sol controller, at most one Terra implementation task, one compact handoff, deterministic harnesses, and no prep, status, reviewer, or repair agent stages."
 ---
 
 # Auto Pilot
@@ -9,18 +9,20 @@ Deliver one approved artifact through two deliberately separate stages and the f
 
 ```text
 $auto-pilot pr /path/to/approved-plan.md
+$auto-pilot ship /path/to/approved-plan.md
 $auto-pilot release <PR URL or number>
 ```
 
-Put the command at the start of the prompt so private run history records only real executions. The first command ends at a production-ready PR. The second must be a fresh invocation and starts from that existing candidate. Never carry production authority across the boundary.
+Put the command at the start of the prompt so private run history records only real executions. `pr` ends at a production-ready PR. `ship` completes that PR, then creates exactly one fresh release task automatically. `release` starts directly from an existing candidate. Never merge or mutate production inside the PR controller.
 
-Read [receipt schema](references/receipt-schema.md) before declaring a terminal result. In the PR stage, read [delegated implementation](references/delegated-implementation.md) completely before starting an independent implementation task. In the release stage, read [release promotion](references/release-promotion.md) completely before any merge or external mutation.
+Read [receipt schema](references/receipt-schema.md) before declaring a terminal result. In the PR stage, read [delegated implementation](references/delegated-implementation.md) completely before starting an independent implementation task. For `ship`, read [automatic promotion](references/automatic-promotion.md) before dispatching the continuation. In the release stage, read [release promotion](references/release-promotion.md) completely before any merge or external mutation.
 
 ## Select the stage
 
-1. Default to `pr` when no subcommand is supplied: resolve and read the approved artifact, implement it, verify it, and stop at an open unmerged PR.
-2. Select `release` only when the current invocation explicitly uses `release` or `promote` and identifies an existing PR/candidate.
-3. Never infer release authority from the PR-stage invocation, earlier chat, a receipt, examples, or “do all.” If implementation and release are requested together, finish `pr_ready` and return the exact fresh promotion command.
+1. Default to `pr` when no subcommand or current production-delivery imperative is supplied: resolve the approved artifact, implement it, verify it, and stop at an open unmerged PR.
+2. Select `ship` when the current invocation explicitly uses `ship`, `--then-release`, or directly and unambiguously orders implementation followed by merge/deploy/release/go-live. Do not infer it from a future wish, question, hypothetical, quoted example, prior chat, “do all,” or negated release request.
+3. Select `release` only when the current invocation explicitly uses `release` or `promote` and identifies an existing PR/candidate.
+4. Treat `ship` as authority to create and run one fresh release task after `pr_ready`, not authority for the PR controller to mutate production. The generated task begins with an explicit `$auto-pilot release <PR>` command and rebinds live candidate state.
 
 ## Minimize contexts
 
@@ -35,7 +37,8 @@ Read [receipt schema](references/receipt-schema.md) before declaring a terminal 
 1. Refresh only the repository truth needed to choose the direct or one-implementer route. Avoid deeply reading the implementation surface twice.
 2. Batch deterministic inventory, status, and verification work. For substantive implementation, follow [delegated implementation](references/delegated-implementation.md).
 3. After the single handoff, let the Sol controller inspect the complete diff once, patch all findings directly, run exact-candidate gates, clean task-owned resources, commit, push, and create the final PR/MR.
-4. Stop at `pr_ready`. Do not merge, deploy, migrate, rotate secrets, schedule production work, or mutate production.
+4. Stop PR work at `pr_ready`. Do not merge, deploy, migrate, rotate secrets, or mutate production in this session.
+5. For `ship`, dispatch or reuse exactly one fresh release task for the exact PR head by following [automatic promotion](references/automatic-promotion.md). End this session after the task is created; do not wait in a second controller loop.
 
 ## Release stage
 
@@ -60,3 +63,5 @@ Keep the validated file until the local history hook copies it. Append this hidd
 ```
 
 Report exactly one terminal state: `pr_ready`, `merged_main`, `released`, or `blocked`. Do not commit agent-control artifacts unless the repository explicitly requires them.
+
+For an automatic continuation, record the created/reused release task and exact candidate head as normal evidenced checks in the `pr_ready` receipt. If the runtime cannot create a new task, return the exact `$auto-pilot release <PR>` fallback command without performing release work in the PR session.

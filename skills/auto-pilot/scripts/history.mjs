@@ -23,7 +23,7 @@ import {createInterface} from 'node:readline'
 import {archiveInstalledSkillVersion, installedSkillBundle} from './history-bundle.mjs'
 import {collectCompletionReceipt} from './history-receipt.mjs'
 
-export const AUTO_PILOT_VERSION = '0.5.0'
+export const AUTO_PILOT_VERSION = '0.6.0'
 export const HISTORY_SCHEMA_VERSION = 2
 export const DEFAULT_RAW_RETENTION_DAYS = 90
 
@@ -38,6 +38,8 @@ const TOKEN_FIELDS = [
 const SELECTED_SKILL = /^\s*\[\$auto-pilot\]\([^\r\n)]*[/\\]auto-pilot[/\\]SKILL\.md(?:#[^\r\n)]*)?\)(?=\s|$)/i
 const LEADING_SKILL = /^\s*\$auto-pilot(?=\s|$)/i
 const NON_EXECUTION_REQUEST = /(?:do not|don't|dont|never)\s+(?:start|run|execute)|(?:just|only)\s+(?:confirm|answer|advise|explain|review|analyse|analyze)|what\s+do\s+you\s+think|how\s+(?:do|can|should|would)\b[^\r\n]{0,80}\b(?:improve|optimise|optimize|design)|\b(?:improve|optimise|optimize|review|analyse|analyze)\b[^\r\n]{0,80}\b(?:skill|auto[ -]?pilot)|(?:優化|改善|檢討)[^\r\n]{0,40}(?:skill|auto[ -]?pilot)|不要(?:開始|執行)|唔好(?:開始|執行)|只(?:需|要)?[^\r\n]{0,12}(?:確認|回答|建議|解釋|分析)|有冇足夠[^\r\n]{0,40}(?:開始|執行)/i
+const NO_RELEASE_CONTINUATION = /(?:do not|don't|dont|never|without)\s+(?:merge|release|deploy|ship|go\s+live)|(?:不要|唔好|不用|唔使|毋須)[^\r\n]{0,20}(?:release|deploy|ship|merge|發布|發佈|上線)/i
+const RELEASE_CONTINUATION = /--then-release\b|(?:finish|complete|implement|build|fix|do)\b[^\r\n]{0,100}\b(?:and|then)\b[^\r\n]{0,30}\b(?:merge|release|deploy|ship|go\s+live)\b|(?:after|once|when)\b[^\r\n]{0,100}\b(?:release|deploy|ship|go\s+live)\b|(?:merge)\b[^\r\n]{0,30}\b(?:and|then)\b[^\r\n]{0,20}\b(?:release|deploy|ship|go\s+live)\b|(?:完成|做完|搞掂)[^\r\n]{0,60}(?:之後|後|然后|然後|並|同埋|再|就)[^\r\n]{0,30}(?:release|deploy|ship|發布|發佈|上線)|(?:直接|自動)[^\r\n]{0,20}(?:release|deploy|ship|發布|發佈|上線)/i
 const TAIL_BYTES = 4 * 1024 * 1024
 
 export function resolveHistoryRoot(env = process.env) {
@@ -57,9 +59,15 @@ export function parseAutoPilotInvocation(prompt) {
 
   const argument = prompt.slice(match[0].length).trim()
   if (NON_EXECUTION_REQUEST.test(argument)) return null
-  const subcommand = argument.match(/^(pr|release|promote)(?=\s|$)/i)?.[1]?.toLowerCase() || null
+  const subcommand = argument.match(/^(pr|release|promote|ship)(?=\s|$)/i)?.[1]?.toLowerCase() || null
+  const releaseMode = subcommand === 'release' || subcommand === 'promote'
+  const continuation = !releaseMode && !NO_RELEASE_CONTINUATION.test(argument)
+    && (subcommand === 'ship' || RELEASE_CONTINUATION.test(argument))
+    ? 'release'
+    : null
   return {
-    mode: subcommand === 'release' || subcommand === 'promote' ? 'release' : 'pr',
+    mode: releaseMode ? 'release' : 'pr',
+    continuation,
     invocation_source: command ? 'leading_command' : 'leading_skill_selection',
     explicit_subcommand: subcommand,
   }
@@ -113,6 +121,7 @@ function startRun(event, {dataRoot, now, invocation}) {
     status: 'running',
     terminal_state: null,
     mode: invocation.mode,
+    continuation: invocation.continuation,
     invocation_source: invocation.invocation_source,
     explicit_subcommand: invocation.explicit_subcommand,
     started_at: now().toISOString(),
@@ -319,6 +328,7 @@ export function historyRuns({dataRoot = resolveHistoryRoot(), sinceDays = null} 
       auto_pilot_version: run.manifest.auto_pilot_version ?? null,
       skill_bundle_sha256: run.manifest.skill_bundle_sha256 ?? run.manifest.skill_sha256 ?? null,
       mode: run.manifest.mode ?? null,
+      continuation: run.manifest.continuation ?? null,
       terminal_state: run.manifest.terminal_state,
       completion_receipt_status: run.outcome?.completion_receipt?.status ?? 'legacy_unverified',
       benchmark_eligible: run.outcome?.completion_receipt?.status === 'valid',
@@ -347,6 +357,7 @@ export function historyReport(options = {}) {
     benchmark_runs: benchmark.length,
     excluded_unverified_runs: runs.length - benchmark.length,
     terminal_states: countValues(runs.map((run) => run.terminal_state || 'unknown')),
+    continuations: countValues(runs.map((run) => run.continuation || 'none')),
     total_tokens: totals.reduce((sum, value) => sum + value, 0),
     median_tokens: medianTokens,
     p95_tokens: percentile(totals, 0.95),

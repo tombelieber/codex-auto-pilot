@@ -29,6 +29,14 @@ test('invocation detection accepts selected or leading skills without matching d
   assert.equal(isAutoPilotInvocation('[$auto-pilot](/opt/skills/auto-pilot/SKILL.md) pr docs/plan.md'), true)
   assert.equal(isAutoPilotInvocation('$auto-pilot pr docs/plan.md'), true)
   assert.equal(parseAutoPilotInvocation('$auto-pilot release PR #42').mode, 'release')
+  assert.equal(parseAutoPilotInvocation('$auto-pilot release PR #42').continuation, null)
+  assert.deepEqual(parseAutoPilotInvocation('$auto-pilot ship docs/plan.md'), {
+    mode: 'pr', continuation: 'release', invocation_source: 'leading_command', explicit_subcommand: 'ship',
+  })
+  assert.equal(parseAutoPilotInvocation('$auto-pilot pr docs/plan.md --then-release').continuation, 'release')
+  assert.equal(parseAutoPilotInvocation('$auto-pilot docs/plan.md. Finish it and release it to production.').continuation, 'release')
+  assert.equal(parseAutoPilotInvocation('$auto-pilot docs/plan.md，完成之後直接上線').continuation, 'release')
+  assert.equal(parseAutoPilotInvocation('$auto-pilot pr docs/plan.md. Do not release or deploy.').continuation, null)
   assert.equal(isAutoPilotInvocation('Can $auto-pilot collect history automatically?'), false)
   assert.equal(isAutoPilotInvocation('Can we improve [$auto-pilot](/opt/skills/auto-pilot/SKILL.md) token usage?'), false)
   assert.equal(isAutoPilotInvocation('[$auto-pilot](/opt/skills/auto-pilot/SKILL.md) do not start; only confirm readiness'), false)
@@ -48,7 +56,7 @@ test('hooks archive one complete root and subagent run with deterministic metric
     writeFileSync(transcript, jsonl(tokens(100, 80, 10, 5, 110)))
     await handleHookEvent({
       hook_event_name: 'UserPromptSubmit', session_id: session, turn_id: turn,
-      prompt: '[$auto-pilot](/opt/skills/auto-pilot/SKILL.md) pr docs/plan.md',
+      prompt: '[$auto-pilot](/opt/skills/auto-pilot/SKILL.md) ship docs/plan.md',
       transcript_path: transcript, cwd: '/repo', model: 'gpt-5.6-sol', permission_mode: 'dontAsk',
     }, {dataRoot, now: () => start})
 
@@ -80,6 +88,7 @@ test('hooks archive one complete root and subagent run with deterministic metric
     assert.equal(manifest.status, 'finished')
     assert.equal(manifest.terminal_state, 'pr_ready')
     assert.equal(manifest.mode, 'pr')
+    assert.equal(manifest.continuation, 'release')
     assert.match(manifest.skill_bundle_sha256, /^[a-f0-9]{64}$/)
     assert.ok(Object.keys(manifest.skill_bundle_files).includes('SKILL.md'))
     assert.equal(existsSync(join(dataRoot, 'versions', manifest.skill_bundle_sha256, 'bundle', 'SKILL.md')), true)
@@ -106,6 +115,7 @@ test('hooks archive one complete root and subagent run with deterministic metric
     assert.equal(historyRuns({dataRoot}).length, 1)
     assert.equal(historyReport({dataRoot}).total_tokens, 170)
     assert.equal(historyReport({dataRoot}).benchmark_runs, 1)
+    assert.deepEqual(historyReport({dataRoot}).continuations, {release: 1})
     assert.equal(JSON.parse(readFileSync(join(run, 'outcome.json'), 'utf8')).completion_receipt.status, 'valid')
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
