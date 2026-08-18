@@ -1,7 +1,7 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.3.0",
-  "description": "Deliver approved software plans as evidence-backed PRs or releases.",
+  "version": "0.5.0",
+  "description": "Deliver approved plans through a minimal-context PR stage and a separately authorized release stage.",
   "author": { "name": "tombelieber", "url": "https://github.com/tombelieber" },
   "homepage": "https://github.com/tombelieber/codex-auto-pilot",
   "repository": "https://github.com/tombelieber/codex-auto-pilot",
@@ -11,13 +11,13 @@
   "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Codex Auto Pilot",
-    "shortDescription": "Turn an approved plan into a verified PR or release",
-    "longDescription": "Gives the active Sol agent a minimal plan-to-delivery contract without prescribing orchestration, model routing, or review teams.",
+    "shortDescription": "Build a verified PR with at most one handoff, then promote separately",
+    "longDescription": "Uses one canonical Sol PR controller, at most one fresh Terra implementation session, one compact handoff, and a separate fresh Sol release boundary.",
     "developerName": "tombelieber",
     "category": "Productivity",
     "capabilities": ["Write", "Git", "Release"],
     "websiteURL": "https://github.com/tombelieber/codex-auto-pilot",
-    "defaultPrompt": ["Use $auto-pilot to execute my approved plan and prepare a production-ready PR."],
+    "defaultPrompt": ["$auto-pilot pr <approved-plan-path>. Prepare a production-ready PR and stop before merge or production mutation."],
     "brandColor": "#2563EB"
   }
 }

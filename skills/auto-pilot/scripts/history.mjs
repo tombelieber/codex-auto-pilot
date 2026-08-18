@@ -20,8 +20,11 @@ import {homedir} from 'node:os'
 import {basename, dirname, join} from 'node:path'
 import {createInterface} from 'node:readline'
 
-export const AUTO_PILOT_VERSION = '0.3.0'
-export const HISTORY_SCHEMA_VERSION = 1
+import {archiveInstalledSkillVersion, installedSkillBundle} from './history-bundle.mjs'
+import {collectCompletionReceipt} from './history-receipt.mjs'
+
+export const AUTO_PILOT_VERSION = '0.5.0'
+export const HISTORY_SCHEMA_VERSION = 2
 export const DEFAULT_RAW_RETENTION_DAYS = 90
 
 const TOKEN_FIELDS = [
@@ -32,9 +35,9 @@ const TOKEN_FIELDS = [
   'reasoning_output_tokens',
   'total_tokens',
 ]
-const TERMINAL_STATES = ['pr_ready', 'merged_main', 'released', 'blocked']
-const SELECTED_SKILL = /\[\$auto-pilot\]\([^\r\n)]*[/\\]auto-pilot[/\\]SKILL\.md(?:#[^\r\n)]*)?\)/i
-const LEADING_SKILL = /^\s*\$auto-pilot(?:\s|$)/i
+const SELECTED_SKILL = /^\s*\[\$auto-pilot\]\([^\r\n)]*[/\\]auto-pilot[/\\]SKILL\.md(?:#[^\r\n)]*)?\)(?=\s|$)/i
+const LEADING_SKILL = /^\s*\$auto-pilot(?=\s|$)/i
+const NON_EXECUTION_REQUEST = /(?:do not|don't|dont|never)\s+(?:start|run|execute)|(?:just|only)\s+(?:confirm|answer|advise|explain|review|analyse|analyze)|what\s+do\s+you\s+think|how\s+(?:do|can|should|would)\b[^\r\n]{0,80}\b(?:improve|optimise|optimize|design)|\b(?:improve|optimise|optimize|review|analyse|analyze)\b[^\r\n]{0,80}\b(?:skill|auto[ -]?pilot)|(?:優化|改善|檢討)[^\r\n]{0,40}(?:skill|auto[ -]?pilot)|不要(?:開始|執行)|唔好(?:開始|執行)|只(?:需|要)?[^\r\n]{0,12}(?:確認|回答|建議|解釋|分析)|有冇足夠[^\r\n]{0,40}(?:開始|執行)/i
 const TAIL_BYTES = 4 * 1024 * 1024
 
 export function resolveHistoryRoot(env = process.env) {
@@ -42,8 +45,24 @@ export function resolveHistoryRoot(env = process.env) {
 }
 
 export function isAutoPilotInvocation(prompt) {
-  if (typeof prompt !== 'string') return false
-  return SELECTED_SKILL.test(prompt) || LEADING_SKILL.test(prompt)
+  return Boolean(parseAutoPilotInvocation(prompt))
+}
+
+export function parseAutoPilotInvocation(prompt) {
+  if (typeof prompt !== 'string') return null
+  const command = prompt.match(LEADING_SKILL)
+  const selected = command ? null : prompt.match(SELECTED_SKILL)
+  const match = command || selected
+  if (!match) return null
+
+  const argument = prompt.slice(match[0].length).trim()
+  if (NON_EXECUTION_REQUEST.test(argument)) return null
+  const subcommand = argument.match(/^(pr|release|promote)(?=\s|$)/i)?.[1]?.toLowerCase() || null
+  return {
+    mode: subcommand === 'release' || subcommand === 'promote' ? 'release' : 'pr',
+    invocation_source: command ? 'leading_command' : 'leading_skill_selection',
+    explicit_subcommand: subcommand,
+  }
 }
 
 export async function handleHookEvent(event, options = {}) {
@@ -53,8 +72,11 @@ export async function handleHookEvent(event, options = {}) {
 
   switch (event.hook_event_name) {
     case 'UserPromptSubmit':
-      if (!isAutoPilotInvocation(event.prompt)) return {handled: false, reason: 'not_auto_pilot'}
-      return startRun(event, {dataRoot, now})
+      {
+        const invocation = parseAutoPilotInvocation(event.prompt)
+        if (!invocation) return {handled: false, reason: 'not_auto_pilot'}
+        return startRun(event, {dataRoot, now, invocation})
+      }
     case 'SubagentStop':
       return archiveSubagent(event, {dataRoot, now})
     case 'Stop':
@@ -66,23 +88,33 @@ export async function handleHookEvent(event, options = {}) {
   }
 }
 
-function startRun(event, {dataRoot, now}) {
+function startRun(event, {dataRoot, now, invocation}) {
   requireIds(event)
   ensurePrivateDirectory(dataRoot)
   pruneExpiredRaw(dataRoot, now())
   const directory = runDirectory(dataRoot, event.session_id, event.turn_id)
   ensurePrivateDirectory(directory)
   const transcript = transcriptSnapshot(event.transcript_path)
+  const bundle = installedSkillBundle()
+  archiveInstalledSkillVersion(dataRoot, bundle, now(), {
+    schema_version: HISTORY_SCHEMA_VERSION,
+    auto_pilot_version: AUTO_PILOT_VERSION,
+  })
   const manifest = {
     schema_version: HISTORY_SCHEMA_VERSION,
     auto_pilot_version: AUTO_PILOT_VERSION,
     collector_version: HISTORY_SCHEMA_VERSION,
     skill_sha256: installedSkillHash(),
+    skill_bundle_sha256: bundle.sha256,
+    skill_bundle_files: bundle.files,
     run_id: runKey(event.session_id, event.turn_id),
     session_id: event.session_id,
     turn_id: event.turn_id,
     status: 'running',
     terminal_state: null,
+    mode: invocation.mode,
+    invocation_source: invocation.invocation_source,
+    explicit_subcommand: invocation.explicit_subcommand,
     started_at: now().toISOString(),
     ended_at: null,
     cwd: stringOrNull(event.cwd),
@@ -111,13 +143,22 @@ async function archiveSubagent(event, {dataRoot, now}) {
   const key = safeSegment(event.agent_id)
   const destination = join(agents, `${key}.jsonl`)
   copyPrivateFile(event.agent_transcript_path, destination)
+  const parsed = await parseTranscriptSegment(destination, 0, null)
   const metadata = {
     schema_version: HISTORY_SCHEMA_VERSION,
     agent_id: event.agent_id,
     agent_type: stringOrNull(event.agent_type),
+    model: parsed.model,
+    effort: parsed.effort,
     archived_at: now().toISOString(),
     transcript_bytes: statSync(destination).size,
     transcript_sha256: await sha256File(destination),
+    token_usage_observed: parsed.token_usage_observed,
+    token_usage: parsed.token_usage_observed ? parsed.latest_total_token_usage : null,
+    tool_calls: parsed.tool_calls,
+    tools: parsed.tools,
+    compactions: parsed.compactions,
+    parse_errors: parsed.parse_errors,
   }
   writePrivateJson(join(agents, `${key}.json`), metadata)
   return {handled: true, action: 'subagent_archived', agent_id: event.agent_id}
@@ -163,7 +204,8 @@ async function finalizeRun(directory, event, {now, reason}) {
   const endedAt = now()
   const tokenUsage = subtractTokenUsage(parsed.latest_total_token_usage, manifest.baseline_token_usage)
   const agentMetadata = listAgentMetadata(directory)
-  const terminalState = detectTerminalState(event.last_assistant_message)
+  const completion = await collectCompletionReceipt(event.last_assistant_message, manifest.mode, directory)
+  const terminalState = completion.terminal_state
   const metrics = {
     schema_version: HISTORY_SCHEMA_VERSION,
     run_id: manifest.run_id,
@@ -183,6 +225,8 @@ async function finalizeRun(directory, event, {now, reason}) {
     parse_errors: parsed.parse_errors,
     subagents: agentMetadata.length,
     subagent_types: countValues(agentMetadata.map((item) => item.agent_type).filter(Boolean)),
+    subagent_models: countValues(agentMetadata.map((item) => item.model).filter(Boolean)),
+    subagent_efforts: countValues(agentMetadata.map((item) => item.effort).filter(Boolean)),
     transcript_bytes: archived?.bytes || 0,
     transcript_sha256: archived?.sha256 || null,
   }
@@ -192,6 +236,7 @@ async function finalizeRun(directory, event, {now, reason}) {
     schema_version: HISTORY_SCHEMA_VERSION,
     run_id: manifest.run_id,
     terminal_state: terminalState,
+    completion_receipt: completion.evidence,
     collection_reason: reason,
     ended_at: endedAt.toISOString(),
     last_assistant_message_sha256: sha256Text(event.last_assistant_message),
@@ -271,7 +316,12 @@ export function historyRuns({dataRoot = resolveHistoryRoot(), sinceDays = null} 
       duration_ms: run.metrics?.duration_ms ?? null,
       model: run.metrics?.model ?? run.manifest.model,
       effort: run.metrics?.effort ?? run.manifest.effort,
+      auto_pilot_version: run.manifest.auto_pilot_version ?? null,
+      skill_bundle_sha256: run.manifest.skill_bundle_sha256 ?? run.manifest.skill_sha256 ?? null,
+      mode: run.manifest.mode ?? null,
       terminal_state: run.manifest.terminal_state,
+      completion_receipt_status: run.outcome?.completion_receipt?.status ?? 'legacy_unverified',
+      benchmark_eligible: run.outcome?.completion_receipt?.status === 'valid',
       total_tokens: run.metrics?.token_usage_observed === false ? null : (run.metrics?.token_usage?.total_tokens ?? null),
       cached_input_tokens: run.metrics?.token_usage?.cached_input_tokens ?? null,
       tool_calls: run.metrics?.tool_calls ?? null,
@@ -285,8 +335,17 @@ export function historyReport(options = {}) {
   const totals = runs.map((run) => run.total_tokens).sort((a, b) => a - b)
   const medianTokens = percentile(totals, 0.5)
   const threshold = medianTokens === null ? null : medianTokens * 2
+  const benchmark = runs.filter((run) => run.benchmark_eligible)
+  const versions = {}
+  for (const run of runs) {
+    const version = run.auto_pilot_version || 'unknown'
+    if (!versions[version]) versions[version] = new Set()
+    if (run.skill_bundle_sha256) versions[version].add(run.skill_bundle_sha256)
+  }
   return {
     runs: runs.length,
+    benchmark_runs: benchmark.length,
+    excluded_unverified_runs: runs.length - benchmark.length,
     terminal_states: countValues(runs.map((run) => run.terminal_state || 'unknown')),
     total_tokens: totals.reduce((sum, value) => sum + value, 0),
     median_tokens: medianTokens,
@@ -294,6 +353,9 @@ export function historyReport(options = {}) {
     max_tokens: totals.length ? totals.at(-1) : null,
     median_duration_ms: percentile(runs.map((run) => run.duration_ms).filter(Number.isFinite).sort((a, b) => a - b), 0.5),
     outliers: threshold === null ? [] : runs.filter((run) => run.total_tokens > threshold).map((run) => run.run_id),
+    version_bundles: Object.fromEntries(Object.entries(versions).map(([version, hashes]) => [version, [...hashes].sort()])),
+    version_drift: Object.entries(versions).filter(([, hashes]) => hashes.size > 1).map(([version]) => version),
+    benchmark: summarizeRuns(benchmark),
   }
 }
 
@@ -302,7 +364,20 @@ function loadRuns(dataRoot) {
     directory,
     manifest: readJson(join(directory, 'manifest.json')),
     metrics: readJson(join(directory, 'metrics.json')),
+    outcome: readJson(join(directory, 'outcome.json')),
   })).filter((run) => run.manifest)
+}
+
+function summarizeRuns(runs) {
+  const totals = runs.map((run) => run.total_tokens).filter(Number.isFinite).sort((a, b) => a - b)
+  const durations = runs.map((run) => run.duration_ms).filter(Number.isFinite).sort((a, b) => a - b)
+  return {
+    runs: runs.length,
+    terminal_states: countValues(runs.map((run) => run.terminal_state || 'unknown')),
+    total_tokens: totals.reduce((sum, value) => sum + value, 0),
+    median_tokens: percentile(totals, 0.5),
+    median_duration_ms: percentile(durations, 0.5),
+  }
 }
 
 async function parseTranscriptSegment(path, requestedStart, turnId) {
@@ -353,14 +428,6 @@ function transcriptSnapshot(path) {
     } catch {}
   }
   return {bytes: stats.size, token_usage: zeroTokenUsage()}
-}
-
-function detectTerminalState(message) {
-  if (typeof message !== 'string') return 'unknown'
-  for (const state of TERMINAL_STATES) {
-    if (new RegExp(`(?:^|[^a-z_])${state}(?:$|[^a-z_])`, 'i').test(message)) return state
-  }
-  return 'unknown'
 }
 
 function listAgentMetadata(directory) {

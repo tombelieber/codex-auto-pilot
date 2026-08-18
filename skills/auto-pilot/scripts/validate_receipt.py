@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a minimal Auto Pilot version 3 completion receipt."""
+"""Validate a minimal Auto Pilot version 4 completion receipt."""
 
 import json
 import re
@@ -32,6 +32,13 @@ def git_sha(value, name):
     return value
 
 
+def full_git_sha(value, name):
+    value = text(value, name)
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", value):
+        die(f"{name} must be a full 40 character hexadecimal Git id")
+    return value.lower()
+
+
 def web_url(value, name):
     value = text(value, name)
     parsed = urlparse(value)
@@ -49,6 +56,7 @@ def validate_git(value):
         die("git.commits must contain at least one commit")
     for index, commit in enumerate(commits):
         git_sha(commit, f"git.commits[{index}]")
+    return value
 
 
 def validate_items(value, kind, require_pass):
@@ -96,9 +104,34 @@ def validate_release(value, allow_failed=False):
     return value
 
 
+def validate_promotion(value, git_value=None):
+    value = obj(value, "promotion")
+    source = value.get("source")
+    if source not in {"live_pr", "pr_ready_receipt"}:
+        die("promotion.source must be live_pr or pr_ready_receipt")
+    source_receipt = value.get("source_receipt")
+    if source == "pr_ready_receipt":
+        text(source_receipt, "promotion.source_receipt")
+    elif source_receipt is not None:
+        die("promotion.source_receipt must be null for live_pr")
+    base_sha = full_git_sha(value.get("candidate_base_sha"), "promotion.candidate_base_sha")
+    head_sha = full_git_sha(value.get("candidate_head_sha"), "promotion.candidate_head_sha")
+    if base_sha == head_sha:
+        die("promotion candidate base and head must differ")
+    authority = text(value.get("authority_evidence"), "promotion.authority_evidence")
+    if not re.search(r"\$auto-pilot\s+(?:release|promote)\b", authority, re.IGNORECASE):
+        die("promotion.authority_evidence must identify the fresh $auto-pilot release/promote invocation")
+    if git_value is not None:
+        commits = {commit.lower() for commit in git_value.get("commits", [])}
+        if head_sha not in commits:
+            die("promotion.candidate_head_sha must appear in git.commits")
+    return value
+
+
 def validate_optional_blocked(root):
+    git_value = None
     if "git" in root:
-        validate_git(root["git"])
+        git_value = validate_git(root["git"])
     if "criteria" in root:
         validate_items(root["criteria"], "criteria", False)
     if "checks" in root:
@@ -107,6 +140,8 @@ def validate_optional_blocked(root):
         validate_pull_request(root["pull_request"])
     if "release" in root:
         validate_release(root["release"], True)
+    if "promotion" in root:
+        validate_promotion(root["promotion"], git_value)
 
 
 def validate(path):
@@ -117,8 +152,8 @@ def validate(path):
     except json.JSONDecodeError as exc:
         die(f"invalid JSON at line {exc.lineno}, column {exc.colno}")
 
-    if root.get("schema_version") != 3:
-        die("schema_version must be 3")
+    if root.get("schema_version") != 4:
+        die("schema_version must be 4")
     mode = root.get("mode")
     terminal = root.get("terminal_state")
     if mode not in {"pr", "release"}:
@@ -147,7 +182,7 @@ def validate(path):
     if blockers:
         die("successful terminal_state cannot contain blockers")
 
-    validate_git(root.get("git"))
+    git_value = validate_git(root.get("git"))
     validate_items(root.get("criteria"), "criteria", True)
     validate_items(root.get("checks"), "checks", True)
     pull_request = validate_pull_request(root.get("pull_request"))
@@ -162,10 +197,13 @@ def validate(path):
             die("pr_ready requires pull_request.merge_sha to be null")
         if release.get("status") != "not_requested" or release.get("url") is not None:
             die("pr_ready requires release.status not_requested and a null URL")
+        if "promotion" in root:
+            die("pr_ready must not contain promotion evidence")
         return terminal
 
     if mode != "release":
         die("merged_main and released require mode release")
+    validate_promotion(root.get("promotion"), git_value)
     if pull_request.get("merged") is not True or pull_request.get("status") != "merged":
         die("release mode requires a merged PR/MR")
     git_sha(pull_request.get("merge_sha"), "pull_request.merge_sha")

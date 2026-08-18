@@ -1,2 +1,2 @@
-skills/**/__pycache__/
-skills/**/*.pyc
+__pycache__/
+*.py[cod]

@@ -1,6 +1,6 @@
 interface:
   display_name: "Auto Pilot"
-  short_description: "Deliver an approved plan as a verified PR or release"
-  default_prompt: "Use $auto-pilot to turn my approved plan into a production-ready PR."
+  short_description: "Build a verified PR with at most one handoff, then promote separately"
+  default_prompt: "$auto-pilot pr <approved-plan-path>. Use deterministic harnesses for mechanical work. For substantive implementation, use exactly one fresh Terra task and return once for one consolidated Sol review. Stop before merge or production mutation; release requires a fresh $auto-pilot release <PR> invocation."
 policy:
   allow_implicit_invocation: false
