@@ -67,10 +67,19 @@ test('routing flags are deterministic and reject empty or duplicate values', () 
   assert.throws(() => parseInvocationOverrides('$auto-pilot pr --implementation-model='), /requires a value/)
   assert.throws(() => parseInvocationOverrides('$auto-pilot pr --implementation-model --release-model gpt-5.6-sol'), /implementation-model requires a value/)
   assert.throws(() => parseInvocationOverrides('$auto-pilot pr --collaboration auto --collaboration off'), /only once/)
+  assert.throws(() => parseInvocationOverrides('$auto-pilot pr --release-thiking high'), /unknown Auto Pilot override flag.*--release-thiking/)
   assert.throws(() => resolveAutoPilotConfig({
     configPath: '/tmp/codex-auto-pilot-no-config.json',
     prompt: '$auto-pilot pr --release-thinking impossible',
   }), /release.thinking must be one of/)
+})
+
+test('a UI skill selection may precede the invocation flags on the next line', () => {
+  assert.deepEqual(parseInvocationOverrides(
+    '[$auto-pilot](/opt/skills/auto-pilot/SKILL.md)\nship docs/plan.md --release-model tuned-sol --release-thinking high',
+  ), {
+    release: {model: 'tuned-sol', thinking: 'high'},
+  })
 })
 
 test('strict validation rejects unsafe or conflicting settings while collector mode records a fallback warning', () => {

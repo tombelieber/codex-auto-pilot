@@ -42,7 +42,17 @@ const LEADING_SKILL = /^\s*\$auto-pilot(?=\s|$)/i
 const NON_EXECUTION_REQUEST = /(?:do not|don't|dont|never)\s+(?:start|run|execute)|(?:just|only)\s+(?:confirm|answer|advise|explain|review|analyse|analyze)|what\s+do\s+you\s+think|how\s+(?:do|can|should|would)\b[^\r\n]{0,80}\b(?:improve|optimise|optimize|design)|\b(?:improve|optimise|optimize|review|analyse|analyze)\b[^\r\n]{0,80}\b(?:skill|auto[ -]?pilot)|(?:優化|改善|檢討)[^\r\n]{0,40}(?:skill|auto[ -]?pilot)|不要(?:開始|執行)|唔好(?:開始|執行)|只(?:需|要)?[^\r\n]{0,12}(?:確認|回答|建議|解釋|分析)|有冇足夠[^\r\n]{0,40}(?:開始|執行)/i
 const NO_RELEASE_CONTINUATION = /(?:do not|don't|dont|never|without)\s+(?:merge|release|deploy|ship|go\s+live)|(?:不要|唔好|不用|唔使|毋須)[^\r\n]{0,20}(?:release|deploy|ship|merge|發布|發佈|上線)/i
 const RELEASE_CONTINUATION = /--then-release\b|(?:finish|complete|implement|build|fix|do)\b[^\r\n]{0,100}\b(?:and|then)\b[^\r\n]{0,30}\b(?:merge|release|deploy|ship|go\s+live)\b|(?:after|once|when)\b[^\r\n]{0,100}\b(?:release|deploy|ship|go\s+live)\b|(?:merge)\b[^\r\n]{0,30}\b(?:and|then)\b[^\r\n]{0,20}\b(?:release|deploy|ship|go\s+live)\b|(?:完成|做完|搞掂)[^\r\n]{0,60}(?:之後|後|然后|然後|並|同埋|再|就)[^\r\n]{0,30}(?:release|deploy|ship|發布|發佈|上線)|(?:直接|自動)[^\r\n]{0,20}(?:release|deploy|ship|發布|發佈|上線)/i
-const AMBIGUOUS_RELEASE_CONTINUATION = /(?:\?|\b(?:can|could|should|would|may|might|whether)\b[^\r\n]{0,100}\b(?:merge|release|deploy|ship|go\s+live)\b|\b(?:later|future|eventually|someday)\b[^\r\n]{0,100}\b(?:merge|release|deploy|ship|go\s+live)\b|\b(?:merge|release|deploy|ship|go\s+live)\b[^\r\n]{0,100}\b(?:later|future|eventually|someday)\b|["“”][^\r\n"“”]{0,120}\b(?:merge|release|deploy|ship|go\s+live)\b[^\r\n"“”]{0,120}["“”])/i
+const AMBIGUOUS_RELEASE_CONTINUATION = [
+  /[?？]\s*$/,
+  /\b(?:can|could|should|would|may|might|whether)\b[^\r\n]{0,100}\b(?:merge|release|deploy|ship|go\s+live)\b/i,
+  /\b(?:later|future|eventually|someday)\b[^\r\n]{0,100}\b(?:merge|release|deploy|ship|go\s+live)\b/i,
+  /\b(?:merge|release|deploy|ship|go\s+live)\b[^\r\n]{0,100}\b(?:later|future|eventually|someday)\b/i,
+  /["“”][^\r\n"“”]{0,120}\b(?:merge|release|deploy|ship|go\s+live)\b[^\r\n"“”]{0,120}["“”]/i,
+  /(?:可唔可以|可不可以|是否|可否|能否|會唔會|会不会|幾時|何時|何时|什么时候)[^\r\n]{0,100}(?:merge|release|deploy|ship|go\s+live|發布|發佈|上線|部署|合併|合并)/i,
+  /(?:merge|release|deploy|ship|go\s+live|發布|發佈|上線|部署|合併|合并)[^\r\n]{0,30}(?:得唔得|行唔行|可以嗎|可以吗|好唔好|好不好|嗎|吗|呢)\s*[。.!！]?\s*$/i,
+  /["“”][^\r\n"“”]{0,120}(?:發布|發佈|上線|部署|合併|合并)[^\r\n"“”]{0,120}["“”]/i,
+  /(?:想|希望|可能|也許|也许|第時|遲啲|迟点|將來|将来)[^\r\n]{0,60}(?:merge|release|deploy|ship|go\s+live|發布|發佈|上線|部署|合併|合并)/i,
+]
 const TAIL_BYTES = 4 * 1024 * 1024
 
 export function resolveHistoryRoot(env = process.env) {
@@ -66,7 +76,7 @@ export function parseAutoPilotInvocation(prompt) {
   const releaseMode = subcommand === 'release' || subcommand === 'promote'
   const explicitContinuation = subcommand === 'ship' || /--then-release\b/i.test(argument)
   const continuation = !releaseMode && !NO_RELEASE_CONTINUATION.test(argument)
-    && (explicitContinuation || (!AMBIGUOUS_RELEASE_CONTINUATION.test(argument) && RELEASE_CONTINUATION.test(argument)))
+    && (explicitContinuation || (!ambiguousReleaseContinuation(argument) && RELEASE_CONTINUATION.test(argument)))
     ? 'release'
     : null
   return {
@@ -75,6 +85,10 @@ export function parseAutoPilotInvocation(prompt) {
     invocation_source: command ? 'leading_command' : 'leading_skill_selection',
     explicit_subcommand: subcommand,
   }
+}
+
+function ambiguousReleaseContinuation(value) {
+  return AMBIGUOUS_RELEASE_CONTINUATION.some((pattern) => pattern.test(value))
 }
 
 export async function handleHookEvent(event, options = {}) {

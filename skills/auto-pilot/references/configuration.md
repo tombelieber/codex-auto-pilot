@@ -38,9 +38,9 @@ The default config path is `~/.codex-auto-pilot/config.json`. Set `CODEX_AUTO_PI
 }
 ```
 
-`substantive_executor` accepts `task`, `direct`, `subagent`, or `auto`. The default `task` still permits direct controller execution for tiny work or a disclosed task-creation fallback. A primary collaboration subagent requires the resolved executor to be explicitly set to `subagent` or `auto` in user config or the current invocation; helper subagents are controlled separately by `collaboration.policy`.
+`substantive_executor` accepts `task`, `direct`, `subagent`, or `auto`. The default `task` still permits direct controller execution for tiny work or a disclosed task-creation fallback. A primary collaboration subagent requires the resolved executor to be explicitly set to `subagent` or `auto` in user config or the current invocation, and also requires collaboration not to be `off`.
 
-`collaboration.policy` accepts `auto` or `off`. `auto` authorizes only the minimum useful bounded helpers with clear ownership. It does not authorize a subagent to become the release owner or silently replace an independent implementation task.
+`collaboration.policy` accepts `auto` or `off`. `auto` authorizes only the minimum useful bounded helpers with clear ownership. `off` forbids both helper subagents and a primary subagent lane; when the executor is `auto`, it may then choose only an independent task or direct controller execution. Neither setting authorizes a subagent to become the release owner or silently replace an independent implementation task.
 
 ## Per-run overrides
 

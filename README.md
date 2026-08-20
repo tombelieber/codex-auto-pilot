@@ -40,12 +40,12 @@ flowchart TB
         P8["P7. Controller patches all findings directly"]
         P9["P8. Exact-candidate verification"]
         P10["P9. Commit, push, and open PR"]
-        P11["P10. Validate pr_ready receipt"]
+        P11["P10. Validate final pr_ready receipt<br/>with continuation outcome"]
 
         P1 --> P2 --> P3
         P3 -->|"Tiny"| P4 --> P7
         P3 -->|"Substantive"| P5
-        P6 --> P7 --> P8 --> P9 --> P10 --> P11
+        P6 --> P7 --> P8 --> P9 --> P10
     end
 
     subgraph S2["Fresh independent implementation task (default substantive lane)"]
@@ -62,9 +62,11 @@ flowchart TB
 
     P5 -->|"Plan + base SHA<br/>scope + required checks"| T1
     T6 -->|"Branch + head SHA<br/>changed paths + checks + risks"| P6
-    P11 --> CONTINUE{"Release continuation authorized?"}
-    CONTINUE -->|"No: pr"| READY["Open, unmerged PR<br/>Session 1 ends"]
-    CONTINUE -->|"Yes: ship"| DISPATCH["Create one fresh task or reuse<br/>the exact release task for this PR head<br/>Session 1 ends"]
+    P10 --> CONTINUE{"Release continuation authorized?"}
+    CONTINUE -->|"No: pr"| P11
+    CONTINUE -->|"Yes: ship"| DISPATCH["Create one fresh task or reuse<br/>the exact release task for this PR head"]
+    DISPATCH --> P11
+    P11 --> READY["Open, unmerged PR<br/>PR controller ends"]
     READY -.->|"Optional later command"| MANUAL["User<br/>$auto-pilot release PR-URL"]
 
     subgraph S3["Fresh release task"]
@@ -146,7 +148,7 @@ Preferences resolve in this order: current invocation flags, optional user confi
 
 Invocation overrides are `--implementation-executor`, `--implementation-model`, `--implementation-thinking`, `--release-model`, `--release-thinking`, and `--collaboration`. See the full [configuration reference](skills/auto-pilot/references/configuration.md).
 
-`task` is the default substantive executor. `direct`, `subagent`, and `auto` are explicit routing choices; a primary collaboration subagent must be declared and is never presented as an independent task. If a user-visible task interface is unavailable, the controller may implement directly and records that disclosed fallback. If a fresh release task interface is unavailable, the PR controller stops at `pr_ready` and returns the exact `$auto-pilot release <PR URL>` command; it never releases in place.
+`task` is the default substantive executor. `direct`, `subagent`, and `auto` are explicit routing choices; a primary collaboration subagent must be declared, requires collaboration not to be `off`, and is never presented as an independent task. If a user-visible task interface is unavailable, the controller may implement directly and records that disclosed fallback. If a fresh release task interface is unavailable, the PR controller stops at `pr_ready` and returns the exact `$auto-pilot release <PR URL>` command; it never releases in place.
 
 ## Delivery modes
 

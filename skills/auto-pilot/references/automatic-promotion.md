@@ -21,11 +21,13 @@ Also accept a direct current imperative such as â€œfinish this and release it,â€
 5. Start the task with this compact prompt, filled from live evidence:
 
 ```text
-$auto-pilot release <PR URL>
+$auto-pilot release <PR URL> --release-model <RESOLVED MODEL> --release-thinking <RESOLVED THINKING>
 This fresh task is the one authorized continuation of the current user's explicit ship request.
 Expected pre-merge candidate head: <FULL HEAD SHA>.
 Resolve the live PR and follow the Auto Pilot release contract. Revalidate any changed head; return material new scope to a PR stage. Source pr_ready receipt: <PATH OR IMMUTABLE ID>.
 ```
+
+Forward the resolved model and thinking values in both the task-creation parameters and the generated command. This preserves a current `ship` invocation override inside the fresh release invocation and keeps its private routing audit aligned with the task that was actually created.
 
 6. Record the task reference and exact candidate head as evidenced checks in the `pr_ready` receipt. For a newly created task, emit `::created-thread{threadId="<REF>"}` (or `clientThreadId`) and use `fresh_release_task` with the same reference in the routing marker. For an exact reused task, identify its title/reference and use `reused_release_task` with a reason. End the PR controller; the release task owns merge, deployment, recovery, and production proof.
 

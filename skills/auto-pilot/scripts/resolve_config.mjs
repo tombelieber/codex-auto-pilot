@@ -27,6 +27,7 @@ const COLLABORATION_POLICIES = new Set(['auto', 'off'])
 const THINKING_LEVELS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
 const MAX_CONFIG_BYTES = 64 * 1024
 const DEFAULT_CONFIG_PATH = () => join(homedir(), '.codex-auto-pilot', 'config.json')
+const LEADING_SKILL_SELECTION = /^\s*\[\$auto-pilot\]\([^)]+\)\s*/i
 const OVERRIDE_FLAGS = [
   ['implementation-executor', 'implementation', 'substantive_executor'],
   ['implementation-model', 'implementation', 'model'],
@@ -96,7 +97,8 @@ export function resolveAutoPilotConfig({env = process.env, prompt = '', configPa
 
 export function parseInvocationOverrides(prompt) {
   if (typeof prompt !== 'string' || !prompt.trim()) return {}
-  const commandLine = prompt.split(/\r?\n/, 1)[0]
+  const commandLine = prompt.replace(LEADING_SKILL_SELECTION, '').trimStart().split(/\r?\n/, 1)[0]
+  rejectUnknownOverrideFlags(commandLine)
   const values = Object.fromEntries(OVERRIDE_FLAGS.map(([name]) => [name, flagValue(commandLine, name)]))
   return compactObject({
     implementation: compactObject({
@@ -112,6 +114,15 @@ export function parseInvocationOverrides(prompt) {
       policy: values.collaboration,
     }),
   })
+}
+
+function rejectUnknownOverrideFlags(line) {
+  const known = new Set(OVERRIDE_FLAGS.map(([name]) => name))
+  const pattern = /(?:^|\s)--((?:implementation|release|collaboration)(?:-[a-z0-9-]+)?)(?==|\s|$)/gi
+  const unknown = [...line.matchAll(pattern)]
+    .map((match) => match[1])
+    .filter((name) => !known.has(name))
+  if (unknown.length) throw new Error(`unknown Auto Pilot override flag(s): ${[...new Set(unknown)].map((name) => `--${name}`).join(', ')}`)
 }
 
 function resolveConfigPath(requestedPath, strict, warnings) {

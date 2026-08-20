@@ -45,8 +45,9 @@ State the resolved implementation lane, model/thinking, collaboration policy, an
 1. Refresh only the repository truth needed to choose the direct or one-implementer route. Avoid deeply reading the implementation surface twice.
 2. Batch deterministic inventory, status, and verification work. For substantive implementation, follow [delegated implementation](references/delegated-implementation.md).
 3. After the single handoff, let the controller inspect the complete diff once, patch all findings directly, run exact-candidate gates, clean task-owned resources, commit, push, and create the final PR/MR.
-4. Stop PR work at `pr_ready`. Do not merge, deploy, migrate, rotate secrets, or mutate production in this session.
-5. For `ship`, dispatch one fresh release task or reuse the exact existing task for the exact PR head by following [automatic promotion](references/automatic-promotion.md). End this session after the task is created; do not wait in a second controller loop.
+4. Once the open PR reaches `pr_ready`, stop PR writes. Do not merge, deploy, migrate, rotate secrets, or mutate production in this session.
+5. For `ship`, dispatch one fresh release task or reuse the exact existing task for the exact PR head by following [automatic promotion](references/automatic-promotion.md). Do not wait in a second controller loop.
+6. Only after the continuation outcome is known, validate the final `pr_ready` receipt with either the created/reused task evidence or the exact unavailable-task fallback. Then end the PR controller.
 
 ## Release stage
 
