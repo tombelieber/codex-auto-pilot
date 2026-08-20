@@ -3,8 +3,11 @@ import {existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync} from 'n
 import {mkdtempSync, rmSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
+import {fileURLToPath} from 'node:url'
 import test from 'node:test'
 import {doctor, install, resolveHome, resolvePaths} from '../lib/installer.mjs'
+
+const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-test-'))
@@ -35,6 +38,20 @@ test('installs only the skill', () => {
     assert.equal(readFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'utf8'), '# Auto Pilot\n')
     assert.equal(existsSync(join(f.home, '.codex', 'agents')), false)
   } finally { f.cleanup() }
+})
+
+test('the repository installer includes v0.8 routing files', () => {
+  const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-install-v080-'))
+  const home = join(root, 'home')
+  try {
+    install({sourceRoot: projectRoot, home})
+    const skill = join(home, '.agents', 'skills', 'auto-pilot')
+    for (const path of [
+      'references/configuration.md',
+      'scripts/resolve_config.mjs',
+      'scripts/history-routing.mjs',
+    ]) assert.equal(existsSync(join(skill, path)), true)
+  } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
 test('refuses collisions by default', () => {

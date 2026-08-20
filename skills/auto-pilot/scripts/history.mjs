@@ -22,9 +22,11 @@ import {createInterface} from 'node:readline'
 
 import {archiveInstalledSkillVersion, installedSkillBundle} from './history-bundle.mjs'
 import {collectCompletionReceipt} from './history-receipt.mjs'
+import {auditRouting} from './history-routing.mjs'
+import {resolveAutoPilotConfig} from './resolve_config.mjs'
 
-export const AUTO_PILOT_VERSION = '0.7.0'
-export const HISTORY_SCHEMA_VERSION = 2
+export const AUTO_PILOT_VERSION = '0.8.0'
+export const HISTORY_SCHEMA_VERSION = 3
 export const DEFAULT_RAW_RETENTION_DAYS = 90
 
 const TOKEN_FIELDS = [
@@ -40,6 +42,17 @@ const LEADING_SKILL = /^\s*\$auto-pilot(?=\s|$)/i
 const NON_EXECUTION_REQUEST = /(?:do not|don't|dont|never)\s+(?:start|run|execute)|(?:just|only)\s+(?:confirm|answer|advise|explain|review|analyse|analyze)|what\s+do\s+you\s+think|how\s+(?:do|can|should|would)\b[^\r\n]{0,80}\b(?:improve|optimise|optimize|design)|\b(?:improve|optimise|optimize|review|analyse|analyze)\b[^\r\n]{0,80}\b(?:skill|auto[ -]?pilot)|(?:優化|改善|檢討)[^\r\n]{0,40}(?:skill|auto[ -]?pilot)|不要(?:開始|執行)|唔好(?:開始|執行)|只(?:需|要)?[^\r\n]{0,12}(?:確認|回答|建議|解釋|分析)|有冇足夠[^\r\n]{0,40}(?:開始|執行)/i
 const NO_RELEASE_CONTINUATION = /(?:do not|don't|dont|never|without)\s+(?:merge|release|deploy|ship|go\s+live)|(?:不要|唔好|不用|唔使|毋須)[^\r\n]{0,20}(?:release|deploy|ship|merge|發布|發佈|上線)/i
 const RELEASE_CONTINUATION = /--then-release\b|(?:finish|complete|implement|build|fix|do)\b[^\r\n]{0,100}\b(?:and|then)\b[^\r\n]{0,30}\b(?:merge|release|deploy|ship|go\s+live)\b|(?:after|once|when)\b[^\r\n]{0,100}\b(?:release|deploy|ship|go\s+live)\b|(?:merge)\b[^\r\n]{0,30}\b(?:and|then)\b[^\r\n]{0,20}\b(?:release|deploy|ship|go\s+live)\b|(?:完成|做完|搞掂)[^\r\n]{0,60}(?:之後|後|然后|然後|並|同埋|再|就)[^\r\n]{0,30}(?:release|deploy|ship|發布|發佈|上線)|(?:直接|自動)[^\r\n]{0,20}(?:release|deploy|ship|發布|發佈|上線)/i
+const AMBIGUOUS_RELEASE_CONTINUATION = [
+  /[?？]\s*$/,
+  /\b(?:can|could|should|would|may|might|whether)\b[^\r\n]{0,100}\b(?:merge|release|deploy|ship|go\s+live)\b/i,
+  /\b(?:later|future|eventually|someday)\b[^\r\n]{0,100}\b(?:merge|release|deploy|ship|go\s+live)\b/i,
+  /\b(?:merge|release|deploy|ship|go\s+live)\b[^\r\n]{0,100}\b(?:later|future|eventually|someday)\b/i,
+  /["“”][^\r\n"“”]{0,120}\b(?:merge|release|deploy|ship|go\s+live)\b[^\r\n"“”]{0,120}["“”]/i,
+  /(?:可唔可以|可不可以|是否|可否|能否|會唔會|会不会|幾時|何時|何时|什么时候)[^\r\n]{0,100}(?:merge|release|deploy|ship|go\s+live|發布|發佈|上線|部署|合併|合并)/i,
+  /(?:merge|release|deploy|ship|go\s+live|發布|發佈|上線|部署|合併|合并)[^\r\n]{0,30}(?:得唔得|行唔行|可以嗎|可以吗|好唔好|好不好|嗎|吗|呢)\s*[。.!！]?\s*$/i,
+  /["“”][^\r\n"“”]{0,120}(?:發布|發佈|上線|部署|合併|合并)[^\r\n"“”]{0,120}["“”]/i,
+  /(?:想|希望|可能|也許|也许|第時|遲啲|迟点|將來|将来)[^\r\n]{0,60}(?:merge|release|deploy|ship|go\s+live|發布|發佈|上線|部署|合併|合并)/i,
+]
 const TAIL_BYTES = 4 * 1024 * 1024
 
 export function resolveHistoryRoot(env = process.env) {
@@ -61,8 +74,9 @@ export function parseAutoPilotInvocation(prompt) {
   if (NON_EXECUTION_REQUEST.test(argument)) return null
   const subcommand = argument.match(/^(pr|release|promote|ship)(?=\s|$)/i)?.[1]?.toLowerCase() || null
   const releaseMode = subcommand === 'release' || subcommand === 'promote'
+  const explicitContinuation = subcommand === 'ship' || /--then-release\b/i.test(argument)
   const continuation = !releaseMode && !NO_RELEASE_CONTINUATION.test(argument)
-    && (subcommand === 'ship' || RELEASE_CONTINUATION.test(argument))
+    && (explicitContinuation || (!ambiguousReleaseContinuation(argument) && RELEASE_CONTINUATION.test(argument)))
     ? 'release'
     : null
   return {
@@ -73,9 +87,14 @@ export function parseAutoPilotInvocation(prompt) {
   }
 }
 
+function ambiguousReleaseContinuation(value) {
+  return AMBIGUOUS_RELEASE_CONTINUATION.some((pattern) => pattern.test(value))
+}
+
 export async function handleHookEvent(event, options = {}) {
   if (!event || typeof event !== 'object') return {handled: false, reason: 'invalid_event'}
-  const dataRoot = options.dataRoot || resolveHistoryRoot(options.env)
+  const env = options.env || process.env
+  const dataRoot = options.dataRoot || resolveHistoryRoot(env)
   const now = options.now || (() => new Date())
 
   switch (event.hook_event_name) {
@@ -83,7 +102,7 @@ export async function handleHookEvent(event, options = {}) {
       {
         const invocation = parseAutoPilotInvocation(event.prompt)
         if (!invocation) return {handled: false, reason: 'not_auto_pilot'}
-        return startRun(event, {dataRoot, now, invocation})
+        return startRun(event, {dataRoot, now, invocation, env})
       }
     case 'SubagentStop':
       return archiveSubagent(event, {dataRoot, now})
@@ -96,7 +115,7 @@ export async function handleHookEvent(event, options = {}) {
   }
 }
 
-function startRun(event, {dataRoot, now, invocation}) {
+function startRun(event, {dataRoot, now, invocation, env}) {
   requireIds(event)
   ensurePrivateDirectory(dataRoot)
   pruneExpiredRaw(dataRoot, now())
@@ -104,6 +123,7 @@ function startRun(event, {dataRoot, now, invocation}) {
   ensurePrivateDirectory(directory)
   const transcript = transcriptSnapshot(event.transcript_path)
   const bundle = installedSkillBundle()
+  const routingConfig = resolveAutoPilotConfig({env, prompt: event.prompt, strict: false})
   archiveInstalledSkillVersion(dataRoot, bundle, now(), {
     schema_version: HISTORY_SCHEMA_VERSION,
     auto_pilot_version: AUTO_PILOT_VERSION,
@@ -130,6 +150,7 @@ function startRun(event, {dataRoot, now, invocation}) {
     model: stringOrNull(event.model),
     effort: null,
     permission_mode: stringOrNull(event.permission_mode),
+    routing_config: routingConfig,
     invocation_prompt_sha256: sha256Text(event.prompt),
     transcript_source: stringOrNull(event.transcript_path),
     transcript_start_bytes: transcript.bytes,
@@ -215,6 +236,11 @@ async function finalizeRun(directory, event, {now, reason}) {
   const agentMetadata = listAgentMetadata(directory)
   const completion = await collectCompletionReceipt(event.last_assistant_message, manifest.mode, directory)
   const terminalState = completion.terminal_state
+  const routing = auditRouting({
+    message: event.last_assistant_message,
+    manifest,
+    subagents: agentMetadata.length,
+  })
   const metrics = {
     schema_version: HISTORY_SCHEMA_VERSION,
     run_id: manifest.run_id,
@@ -236,6 +262,7 @@ async function finalizeRun(directory, event, {now, reason}) {
     subagent_types: countValues(agentMetadata.map((item) => item.agent_type).filter(Boolean)),
     subagent_models: countValues(agentMetadata.map((item) => item.model).filter(Boolean)),
     subagent_efforts: countValues(agentMetadata.map((item) => item.effort).filter(Boolean)),
+    routing,
     transcript_bytes: archived?.bytes || 0,
     transcript_sha256: archived?.sha256 || null,
   }
@@ -258,6 +285,7 @@ async function finalizeRun(directory, event, {now, reason}) {
     ended_at: endedAt.toISOString(),
     model: metrics.model,
     effort: metrics.effort,
+    orchestration_status: routing.status,
   })
   return {handled: true, action: 'finished', run_id: manifest.run_id, terminal_state: terminalState}
 }
@@ -336,6 +364,7 @@ export function historyRuns({dataRoot = resolveHistoryRoot(), sinceDays = null} 
       cached_input_tokens: run.metrics?.token_usage?.cached_input_tokens ?? null,
       tool_calls: run.metrics?.tool_calls ?? null,
       subagents: run.metrics?.subagents ?? null,
+      orchestration_status: run.metrics?.routing?.status ?? run.manifest.orchestration_status ?? 'legacy_unobserved',
     }))
     .sort((left, right) => left.started_at.localeCompare(right.started_at))
 }
@@ -358,6 +387,7 @@ export function historyReport(options = {}) {
     excluded_unverified_runs: runs.length - benchmark.length,
     terminal_states: countValues(runs.map((run) => run.terminal_state || 'unknown')),
     continuations: countValues(runs.map((run) => run.continuation || 'none')),
+    orchestration_statuses: countValues(runs.map((run) => run.orchestration_status || 'legacy_unobserved')),
     total_tokens: totals.reduce((sum, value) => sum + value, 0),
     median_tokens: medianTokens,
     p95_tokens: percentile(totals, 0.95),

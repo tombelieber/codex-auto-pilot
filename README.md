@@ -8,47 +8,47 @@ $auto-pilot ship docs/approved-plan.md
 $auto-pilot release https://github.com/owner/repo/pull/123
 ```
 
-Auto Pilot minimizes model contexts without weakening the final review or production boundary. Tiny work stays in one Sol session. Substantive PR work uses one fresh Terra implementation session and one compact handoff back to the same Sol controller. Production promotion always starts in a fresh Sol session from the live PR; `ship` creates that session automatically after `pr_ready`.
+Auto Pilot v0.8.0 minimizes contexts without weakening the final review or production boundary. Tiny work stays with the controller. By default, substantive PR work uses one fresh, user-visible independent Codex task in an isolated worktree, then returns one compact handoff to the controller. The built-in preference is `gpt-5.6-terra` with `ultra` thinking for that task; a generated release task prefers `gpt-5.6-sol` with `xhigh`. Those are configurable preferences, not delivery evidence or authority.
 
 ## What it does
 
 1. Treats a complete approved artifact as the PR-stage implementation input.
-2. Routes tiny work directly and substantive implementation to at most one fresh Terra session.
-3. Returns once to the canonical Sol controller for one consolidated review, direct fixes, exact-candidate verification, and PR creation.
+2. Routes tiny work directly and substantive implementation to one declared accountable lane.
+3. Returns once to the controller for one consolidated review, direct fixes, exact-candidate verification, and PR creation.
 4. Stops at an open, unmerged `pr_ready` result with no production mutation.
-5. Promotes only through one fresh Sol release session—started manually with `release`, or automatically after `pr_ready` when the current command explicitly selects `ship`.
+5. Promotes only through a fresh release task—started manually with `release`, or automatically after `pr_ready` when the current command explicitly selects `ship`.
 
-It does **not** create planning, preparation, inventory, status, log-summary, reviewer, or repair agents. Mechanical inventory and verification belong in deterministic repository scripts or bounded tool calls.
+An independent Codex task is not a collaboration subagent. Collaboration subagents are optional, bounded helpers with isolated ownership; they never silently replace the primary task or become the release owner. Auto Pilot does **not** create planning, preparation, inventory, status, log-summary, reviewer, or repair agents. Mechanical inventory and verification belong in deterministic repository scripts or bounded tool calls.
 
-## Session topology
+## Execution topology
 
-There are at most three sessions across the complete PR-to-production lifecycle. Tiny PRs use only Session 1. Substantive PRs add Session 2. Session 3 starts either from a later manual `release` command or automatically after a current `ship` command reaches `pr_ready`.
+There are at most three primary contexts across a complete PR-to-production lifecycle. Tiny PRs use only the controller. Substantive PRs add one accountable implementation lane. A release controller starts either from a later manual `release` command or automatically after a current `ship` command reaches `pr_ready`.
 
 ```mermaid
 flowchart TB
     START["User<br/>$auto-pilot pr or ship approved-plan.md"] --> P1
 
-    subgraph S1["SESSION 1 — Sol PR Controller (canonical)"]
+    subgraph S1["PR controller"]
         direction TB
         P1["P1. Read approved plan<br/>Acquire PR-stage authority"]
         P2["P2. Minimal repository truth refresh<br/>Bind base SHA, scope, and rules"]
         P3{"P3. Tiny or substantive?"}
-        P4["P4A. Tiny change<br/>Sol implements directly"]
-        P5["P4B. Prepare Terra input<br/>Then pause and wait"]
+        P4["P4A. Tiny change<br/>Controller implements directly"]
+        P5["P4B. Dispatch declared<br/>implementation lane"]
         P6["P5. Resume and validate handoff<br/>Branch, head SHA, and checks"]
         P7["P6. One consolidated review<br/>Correctness, architecture, and security"]
-        P8["P7. Sol patches all findings directly"]
+        P8["P7. Controller patches all findings directly"]
         P9["P8. Exact-candidate verification"]
         P10["P9. Commit, push, and open PR"]
-        P11["P10. Validate pr_ready receipt"]
+        P11["P10. Validate final pr_ready receipt<br/>with continuation outcome"]
 
         P1 --> P2 --> P3
         P3 -->|"Tiny"| P4 --> P7
         P3 -->|"Substantive"| P5
-        P6 --> P7 --> P8 --> P9 --> P10 --> P11
+        P6 --> P7 --> P8 --> P9 --> P10
     end
 
-    subgraph S2["SESSION 2 — Fresh Terra Implementation (substantive PR only)"]
+    subgraph S2["Fresh independent implementation task (default substantive lane)"]
         direction TB
         T1["T1. Create isolated worktree<br/>Bind the supplied base SHA"]
         T2["T2. Read the approved plan and owned scope"]
@@ -62,12 +62,14 @@ flowchart TB
 
     P5 -->|"Plan + base SHA<br/>scope + required checks"| T1
     T6 -->|"Branch + head SHA<br/>changed paths + checks + risks"| P6
-    P11 --> CONTINUE{"Release continuation authorized?"}
-    CONTINUE -->|"No: pr"| READY["Open, unmerged PR<br/>Session 1 ends"]
-    CONTINUE -->|"Yes: ship"| DISPATCH["Create or reuse exactly one<br/>fresh release task for this PR head<br/>Session 1 ends"]
+    P10 --> CONTINUE{"Release continuation authorized?"}
+    CONTINUE -->|"No: pr"| P11
+    CONTINUE -->|"Yes: ship"| DISPATCH["Create one fresh task or reuse<br/>the exact release task for this PR head"]
+    DISPATCH --> P11
+    P11 --> READY["Open, unmerged PR<br/>PR controller ends"]
     READY -.->|"Optional later command"| MANUAL["User<br/>$auto-pilot release PR-URL"]
 
-    subgraph S3["SESSION 3 — Fresh Sol Release Controller"]
+    subgraph S3["Fresh release task"]
         direction TB
         R1["R1. Acquire fresh release authority"]
         R2["R2. Read live PR state<br/>Never rely on Session 1 conversation"]
@@ -85,14 +87,14 @@ flowchart TB
     MANUAL --> R1
 ```
 
-| Work | Session 1: Sol PR | Session 2: Terra | Session 3: Sol release |
+| Work | PR controller | Implementation lane | Release task |
 |---|---:|---:|---:|
 | Tiny PR | Required | Not created | Not created |
-| Substantive PR | Required | Required | Not created |
-| One-command `ship` | Required | Only if substantive | Automatically created after `pr_ready` |
+| Substantive PR (default) | Required | One independent task, isolated worktree | Not created |
+| One-command `ship` | Required | Only if substantive | One fresh task after `pr_ready`, unless exact continuation exists |
 | Later manual promotion | Already ended | Already ended | Required |
 
-The controller-to-implementer input contains the approved plan, base SHA, owned scope, and required checks. The only return handoff contains Git identities, changed paths, check evidence, risks, and blockers—not copied conversation history or hidden reasoning. `ship` does not carry the PR conversation into release: it creates a new task with the live PR URL, exact head SHA, and explicit release command.
+The controller-to-implementer input contains the approved plan, base SHA, owned scope, and required checks. The only return handoff contains Git identities, changed paths, check evidence, risks, and blockers—not copied conversation history or hidden reasoning. `ship` does not carry the PR conversation into release: it creates one fresh task for a PR head, or reuses the exact existing continuation task for that same head.
 
 ## Install
 
@@ -132,6 +134,22 @@ npx github:tombelieber/codex-auto-pilot install --with-local-history
 
 This adds four passive user-level Codex lifecycle hooks without changing model context. Existing hook definitions are preserved and backed up before modification. Review and trust newly installed hooks once with `/hooks`.
 
+## Configuration
+
+Preferences resolve in this order: current invocation flags, optional user configuration, then built-in defaults. The optional JSON file is `~/.codex-auto-pilot/config.json`; set `CODEX_AUTO_PILOT_CONFIG` to another absolute path. It is read only.
+
+```json
+{
+  "implementation": {"substantive_executor": "task", "model": "gpt-5.6-terra", "thinking": "ultra"},
+  "release": {"model": "gpt-5.6-sol", "thinking": "xhigh"},
+  "collaboration": {"policy": "auto"}
+}
+```
+
+Invocation overrides are `--implementation-executor`, `--implementation-model`, `--implementation-thinking`, `--release-model`, `--release-thinking`, and `--collaboration`. See the full [configuration reference](skills/auto-pilot/references/configuration.md).
+
+`task` is the default substantive executor. `direct`, `subagent`, and `auto` are explicit routing choices; a primary collaboration subagent must be declared, requires collaboration not to be `off`, and is never presented as an independent task. If a user-visible task interface is unavailable, the controller may implement directly and records that disclosed fallback. If a fresh release task interface is unavailable, the PR controller stops at `pr_ready` and returns the exact `$auto-pilot release <PR URL>` command; it never releases in place.
+
 ## Delivery modes
 
 PR mode is the default, but the explicit form is preferred:
@@ -148,7 +166,7 @@ Ship mode is the one-command PR-to-production lane:
 $auto-pilot ship docs/approved-plan.md
 ```
 
-An equally clear current instruction such as “finish this and release it” may be normalized to `ship`. Auto Pilot still completes the PR stage first. Once the PR is ready, it creates or reuses exactly one fresh release task bound to that PR head, then ends the PR controller. Questions, hypotheticals, future wishes, quoted examples, prior-chat intent, and negated release requests never select this mode.
+An equally clear current instruction such as “finish this and release it” may be normalized to `ship`. Auto Pilot still completes the PR stage first. Once the PR is ready, it creates one fresh release task for that PR head, or reuses its exact existing continuation, then ends the PR controller. Questions, hypotheticals, future wishes, quoted examples, prior-chat intent, and negated release requests never select this mode.
 
 Release mode requires a new explicit invocation that identifies an existing PR:
 
@@ -169,7 +187,7 @@ The plugin bundles an optional, local-only collector. After its hooks are truste
 3. `Stop` archives the root transcript and computes deterministic run metrics.
 4. `SessionEnd` recovers a run that ended without a normal turn stop.
 
-Collection uses local Node.js scripts and returns empty hook context. It does not call a model, add orchestration, or upload data. Raw transcripts default to 90-day retention while manifests and aggregate metrics remain available.
+Collection uses local Node.js scripts and returns empty hook context. It does not call a model, add orchestration, or upload data. Raw transcripts default to 90-day retention while manifests and aggregate metrics remain available. A private routing audit records passed, fallback, deviation, or unknown separately from the receipt-backed delivery outcome; it does not make a delivery receipt pass or fail.
 
 ```bash
 codex-auto-pilot history status
@@ -183,7 +201,7 @@ The archive lives at `~/.codex-auto-pilot/history` by default. Override it with 
 
 ## Is this topology optimal?
 
-It is the current **structurally optimized candidate**, not a universal or statistically proven optimum. It minimizes handoffs subject to three non-negotiable constraints: an independent substantive implementation context, one canonical final reviewer/fixer, and a fresh production-authority boundary. Automatic `ship` removes a user round trip without merging the two model contexts.
+It is the current **structurally optimized candidate**, not a universal or statistically proven optimum. It minimizes handoffs subject to three non-negotiable constraints: an independent substantive implementation context by default, one final reviewer/fixer, and a fresh production-authority boundary. Automatic `ship` removes a user round trip without merging the PR and release contexts.
 
 Verify it from receipt-backed local history rather than intuition:
 
