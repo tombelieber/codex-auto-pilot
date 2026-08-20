@@ -27,7 +27,7 @@ Expected pre-merge candidate head: <FULL HEAD SHA>.
 Resolve the live PR and follow the Auto Pilot release contract. Revalidate any changed head; return material new scope to a PR stage. Source pr_ready receipt: <PATH OR IMMUTABLE ID>.
 ```
 
-6. Record the task reference and exact candidate head as evidenced checks in the `pr_ready` receipt. For a newly created task, emit the app's created-task directive and use `fresh_release_task` with the same reference in the routing marker. For an exact reused task, identify its title/reference and use `reused_release_task` with a reason. End the PR controller; the release task owns merge, deployment, recovery, and production proof.
+6. Record the task reference and exact candidate head as evidenced checks in the `pr_ready` receipt. For a newly created task, emit `::created-thread{threadId="<REF>"}` (or `clientThreadId`) and use `fresh_release_task` with the same reference in the routing marker. For an exact reused task, identify its title/reference and use `reused_release_task` with a reason. End the PR controller; the release task owns merge, deployment, recovery, and production proof.
 
 ## Fail closed
 

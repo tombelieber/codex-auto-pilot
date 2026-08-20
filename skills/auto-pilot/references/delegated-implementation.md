@@ -70,4 +70,4 @@ After handoff, the controller must:
 
 If the implementer fails or stops incomplete, pick up its usable branch and finish in the controller task. Do not start a replacement wave by default.
 
-At final handoff, emit the created-task directive for every user-visible implementation task and use the same task reference in the Auto Pilot routing marker. For direct or subagent execution, record the real lane and a short reason. The completion receipt remains about the delivered candidate; orchestration is audited separately by private history.
+At final handoff, emit `::created-thread{threadId="<REF>"}` (or `clientThreadId`) for every user-visible implementation task and use the same task reference in the Auto Pilot routing marker. For direct or subagent execution, record the real lane and a short reason. The completion receipt remains about the delivered candidate; orchestration is audited separately by private history.
