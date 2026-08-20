@@ -25,6 +25,22 @@ function tokens(input, cached, output, reasoning, total) {
   }}}}
 }
 
+function validPrReceipt() {
+  return {
+    schema_version: 5,
+    mode: 'pr',
+    terminal_state: 'pr_ready',
+    plan: {source: 'docs/plan.md', approved: true},
+    summary: 'Implemented and verified the approved scope.',
+    git: {base_branch: 'main', delivery_branch: 'feature/test', commits: ['a'.repeat(40)]},
+    criteria: [{id: 'AC-1', status: 'passed', evidence: 'Exact acceptance path passed'}],
+    checks: [{name: 'test', status: 'passed', evidence: 'Bounded command artifact'}],
+    pull_request: {url: 'https://github.com/owner/repo/pull/1', status: 'open', merged: false, merge_sha: null},
+    release: {status: 'not_requested', url: null, evidence: 'PR stage; production was not changed'},
+    blockers: [],
+  }
+}
+
 test('invocation detection accepts selected or leading skills without matching discussion', () => {
   assert.equal(isAutoPilotInvocation('[$auto-pilot](/opt/skills/auto-pilot/SKILL.md) pr docs/plan.md'), true)
   assert.equal(isAutoPilotInvocation('$auto-pilot pr docs/plan.md'), true)
@@ -76,7 +92,7 @@ test('hooks archive one complete root and subagent run with deterministic metric
       agent_id: 'agent-1', agent_type: 'worker', agent_transcript_path: agentTranscript,
     }, {dataRoot, now: () => finish})
     const receipt = join(root, 'receipt.json')
-    writeFileSync(receipt, JSON.stringify({schema_version: 4, mode: 'pr', terminal_state: 'pr_ready'}))
+    writeFileSync(receipt, JSON.stringify(validPrReceipt()))
     await handleHookEvent({
       hook_event_name: 'Stop', session_id: session, turn_id: turn,
       transcript_path: transcript, last_assistant_message: `Complete.\n<!-- auto-pilot-receipt: ${receipt} -->`,
@@ -172,7 +188,7 @@ test('receipt mode must match the invocation stage', async () => {
   const receipt = join(root, 'receipt.json')
   try {
     writeFileSync(transcript, jsonl(tokens(10, 0, 1, 0, 11)))
-    writeFileSync(receipt, JSON.stringify({schema_version: 4, mode: 'pr', terminal_state: 'pr_ready'}))
+    writeFileSync(receipt, JSON.stringify(validPrReceipt()))
     await handleHookEvent({
       hook_event_name: 'UserPromptSubmit', session_id: 'session-mode', turn_id: 'turn-mode',
       prompt: '$auto-pilot release PR #42', transcript_path: transcript,
@@ -185,6 +201,30 @@ test('receipt mode must match the invocation stage', async () => {
     assert.equal(JSON.parse(readFileSync(join(run, 'manifest.json'), 'utf8')).terminal_state, 'unknown')
     assert.equal(JSON.parse(readFileSync(join(run, 'outcome.json'), 'utf8')).completion_receipt.status, 'mode_mismatch')
     assert.equal(existsSync(join(run, 'receipt.json')), false)
+  } finally { rmSync(root, {recursive: true, force: true}) }
+})
+
+test('history rejects a shallow receipt that bypasses the full validator', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-history-shallow-'))
+  const dataRoot = join(root, 'data')
+  const transcript = join(root, 'root.jsonl')
+  const receipt = join(root, 'receipt.json')
+  try {
+    writeFileSync(transcript, jsonl(tokens(10, 0, 1, 0, 11)))
+    writeFileSync(receipt, JSON.stringify({schema_version: 5, mode: 'pr', terminal_state: 'pr_ready'}))
+    await handleHookEvent({
+      hook_event_name: 'UserPromptSubmit', session_id: 'session-shallow', turn_id: 'turn-shallow',
+      prompt: '$auto-pilot pr docs/plan.md', transcript_path: transcript,
+    }, {dataRoot})
+    await handleHookEvent({
+      hook_event_name: 'Stop', session_id: 'session-shallow', turn_id: 'turn-shallow',
+      transcript_path: transcript, last_assistant_message: `<!-- auto-pilot-receipt: ${receipt} -->`,
+    }, {dataRoot})
+    const outcome = JSON.parse(
+      readFileSync(join(dataRoot, 'runs', 'session-shallow--turn-shallow', 'outcome.json'), 'utf8'),
+    )
+    assert.equal(outcome.completion_receipt.status, 'invalid_receipt')
+    assert.equal(outcome.terminal_state, 'unknown')
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
 

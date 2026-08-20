@@ -1,6 +1,6 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Minimal-context Codex delivery with one implementation handoff and an optional automatic fresh release continuation.",
   "bin": {
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"

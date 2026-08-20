@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto'
+import {spawnSync} from 'node:child_process'
 import {
   chmodSync,
   existsSync,
@@ -8,10 +9,11 @@ import {
   writeFileSync,
 } from 'node:fs'
 import {basename, dirname, isAbsolute, join} from 'node:path'
+import {fileURLToPath} from 'node:url'
 
 const RECEIPT_MARKER = /<!--\s*auto-pilot-receipt:\s*([^\r\n]*?)\s*-->/i
 const MAX_RECEIPT_BYTES = 1024 * 1024
-const TERMINAL_STATES = ['pr_ready', 'merged_main', 'released', 'blocked']
+const RECEIPT_VALIDATOR = fileURLToPath(new URL('./validate_receipt.py', import.meta.url))
 
 export function collectCompletionReceipt(message, expectedMode, directory) {
   const marker = typeof message === 'string' ? message.match(RECEIPT_MARKER) : null
@@ -32,7 +34,15 @@ export function collectCompletionReceipt(message, expectedMode, directory) {
     return receiptFailure('invalid_json', source)
   }
 
-  const error = receiptError(receipt, expectedMode)
+  const validation = spawnSync('python3', [RECEIPT_VALIDATOR, source], {
+    stdio: 'ignore',
+    timeout: 5000,
+    windowsHide: true,
+  })
+  if (validation.error) return receiptFailure('validator_unavailable', source)
+  if (validation.status !== 0) return receiptFailure('invalid_receipt', source)
+
+  const error = receiptModeError(receipt, expectedMode)
   if (error) return receiptFailure(error, source)
 
   writePrivateJson(join(directory, 'receipt.json'), receipt)
@@ -48,11 +58,7 @@ export function collectCompletionReceipt(message, expectedMode, directory) {
   }
 }
 
-function receiptError(receipt, expectedMode) {
-  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) return 'invalid_json'
-  if (receipt.schema_version !== 4) return 'unsupported_schema'
-  if (!TERMINAL_STATES.includes(receipt.terminal_state)) return 'invalid_terminal_state'
-  if (!['pr', 'release'].includes(receipt.mode)) return 'invalid_mode'
+function receiptModeError(receipt, expectedMode) {
   if (expectedMode && receipt.mode !== expectedMode) return 'mode_mismatch'
   return null
 }

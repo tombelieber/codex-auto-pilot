@@ -15,14 +15,14 @@ function receipt(state = 'pr_ready') {
   const released = state === 'released'
   const merged = state === 'merged_main' || released
   const value = {
-    schema_version: 4,
+    schema_version: 5,
     mode: merged ? 'release' : 'pr',
     terminal_state: state,
     plan: {source: 'docs/plan.md', approved: true},
     summary: 'Implemented and verified the approved plan.',
     git: {base_branch: 'main', delivery_branch: 'feature/test', commits: [headSha]},
-    criteria: [{id: 'AC-1', status: 'passed', evidence: 'Observed behavior'}],
-    checks: [{name: released ? 'post-release E2E' : 'test', status: 'passed', evidence: 'Command or runtime evidence'}],
+    criteria: [{id: 'AC-1', status: 'passed', evidence: 'The exact acceptance path reached its expected terminal state'}],
+    checks: [{name: released ? 'post-release E2E' : 'test', status: 'passed', evidence: 'Exact candidate command and bounded artifact reference'}],
     pull_request: {url: 'https://github.com/owner/repo/pull/1', status: merged ? 'merged' : 'open', merged, merge_sha: merged ? mergeSha : null},
     release: released
       ? {status: 'passed', url: 'https://github.com/owner/repo/releases/tag/v1', evidence: 'Production deployment and post-release E2E passed'}
@@ -38,6 +38,27 @@ function receipt(state = 'pr_ready') {
       candidate_base_sha: baseSha,
       candidate_head_sha: headSha,
       authority_evidence: 'Explicit current invocation: $auto-pilot release PR #1',
+    }
+  }
+  if (released) {
+    value.capability_reachability = {
+      deployed_candidate_sha: mergeSha,
+      scope_evidence: 'Repository release impact selected only the changed reply capability.',
+      cases: [{
+        id: 'reply-comment',
+        actor: 'authenticated external caller',
+        credential_class: 'personal access token',
+        resource_scope: 'runtime-supplied canary workspace and connected account',
+        entrypoint: 'public reply apply endpoint',
+        runtime_principal: 'production edge runtime database role',
+        representative_data_case: 'legacy blank author identity and valid provider reply target',
+        expected_terminal_outcome: 'provider reply identifier observed',
+        deterministic: {status: 'passed', evidence: 'Isolated API-to-worker-to-fake-provider E2E passed'},
+        production: {status: 'passed', evidence: 'Bounded canary reached the terminal provider reply'},
+        authorization_changed: true,
+        authorized: {status: 'passed', decision: 'allowed', effective_binding_count: 1, evidence: 'Scoped runtime credential was allowed'},
+        unauthorized: {status: 'passed', decision: 'denied', effective_binding_count: 0, evidence: 'Out-of-scope credential was denied'},
+      }],
     }
   }
   return value
@@ -119,6 +140,36 @@ test('rejects release candidate not bound to commits', () => {
 test('rejects released state without release URL', () => {
   const value = receipt('released')
   value.release.url = null
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects released state without exact capability reachability', () => {
+  const value = receipt('released')
+  delete value.capability_reachability
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects a release proved only by a deterministic fixture', () => {
+  const value = receipt('released')
+  value.capability_reachability.cases[0].production.status = 'not_run'
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects an authorized proof with zero effective scope bindings', () => {
+  const value = receipt('released')
+  value.capability_reachability.cases[0].authorized.effective_binding_count = 0
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects reachability recorded for a different deployed commit', () => {
+  const value = receipt('released')
+  value.capability_reachability.deployed_candidate_sha = 'd'.repeat(40)
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects reachability without the observed runtime principal', () => {
+  const value = receipt('released')
+  value.capability_reachability.cases[0].runtime_principal = ''
   assert.equal(run(value).status, 1)
 })
 

@@ -1,6 +1,6 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Deliver approved plans through a minimal-context PR stage and optionally auto-start a fresh release task.",
   "author": { "name": "tombelieber", "url": "https://github.com/tombelieber" },
   "homepage": "https://github.com/tombelieber/codex-auto-pilot",

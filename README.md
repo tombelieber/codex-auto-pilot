@@ -156,9 +156,9 @@ Release mode requires a new explicit invocation that identifies an existing PR:
 $auto-pilot release https://github.com/owner/repo/pull/123
 ```
 
-It starts from the live candidate, merges through the repository's normal protected path, uses the discovered release mechanism, handles approved migrations or backfills, and verifies the post-release surface. If the repository has no release mechanism, it stops after merging. A PR-stage conversation or receipt is evidence, never release authority.
+It starts from the live candidate, merges through the repository's normal protected path, uses the discovered release mechanism, handles approved migrations or backfills, and verifies each affected capability through its exact production actor, credential, scope, runtime principal, representative data, and terminal outcome. Live canaries are release-only and impact-selected; they are never run on every edit or commit. If the repository has no release mechanism, it stops after merging. A PR-stage conversation or receipt is evidence, never release authority.
 
-Each session reports one terminal state: the PR controller reports `pr_ready` or `blocked`; the fresh release controller reports `merged_main`, `released`, or `blocked`. Its small completion receipt records plan, Git, criteria, checks, PR/release evidence, and blockers without copying model reasoning.
+Each session reports one terminal state: the PR controller reports `pr_ready` or `blocked`; the fresh release controller reports `merged_main`, `released`, or `blocked`. Its completion receipt records plan, Git, criteria, checks, PR/release evidence, exact release capability reachability, and blockers without copying model reasoning. A successful deployment with missing reachability proof remains `blocked`, not `released`.
 
 ## Local run history
 

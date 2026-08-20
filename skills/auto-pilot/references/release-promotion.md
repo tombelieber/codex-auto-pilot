@@ -16,13 +16,26 @@ Use this workflow only in a fresh `$auto-pilot release <PR>` or `$auto-pilot pro
 3. Read the repository release and migration contracts. Produce the exact dry-run plan, compatibility/backfill decision, rollback boundary, required credentials, and pre-mutation live-state proof.
 4. Merge through the repository's normal protected path. Re-resolve the exact merge SHA and use a clean checkout at that SHA for release.
 5. Run the repository release owner once. Let it perform its own required gate, approved migrations/backfills, deploy, smoke, and domain proof without duplicating the same expensive checks immediately beforehand.
-6. Verify real production after release: exact deployed identity, critical preserved state, health/queue/error signals, and at least one safe real-surface or real-data observation when the repository permits it.
+6. Verify real production before declaring release: exact deployed identity,
+   critical preserved state, health/queue/error signals, and the affected
+   capability through its real actor, credential class, resource scope, entry
+   point, runtime principal, representative data case, and terminal outcome.
+   Keep deterministic local E2E as separate evidence; a provider or production
+   canary does not replace it.
+
+Select live canaries from repository impact evidence. Do not call external
+providers on every edit or commit. A provider-specific change gets one bounded
+release canary for that provider/capability; shared cross-provider code gets one
+for each affected provider. Use a runtime-supplied dedicated test resource
+through the normal production integration, without hard-coded account IDs or a
+duplicate provider app merely for isolation. When authorization changed, prove
+both the authorized and denied principals at the exact boundary.
 
 ## Fail closed
 
 - Before production mutation: fix a small causal defect on the PR branch, bind the new head, and re-run the affected evidence. Block on material new scope or missing authority.
 - During a database migration or incomplete deploy: stop and reconcile exact remote state. Never blindly retry, roll forward, or roll back.
-- After a completed deploy: use only the repository's bounded resume mechanism for eligible smoke or observation failures.
+- After a completed deploy: use only the repository's bounded resume mechanism for eligible smoke or observation failures. If exact capability reachability remains unavailable or fails, return `blocked`; deployment alone cannot become `released`.
 - Never call a merge, draft release, successful command, or passing local test “released” without current production evidence.
 
 ## Terminal result
@@ -31,4 +44,5 @@ Use this workflow only in a fresh `$auto-pilot release <PR>` or `$auto-pilot pro
 - `released`: merge, production mutation, and post-release evidence all succeeded.
 - `blocked`: record the exact candidate, last safe boundary, remote state, and next authorized action.
 
-The release receipt must use schema v4 and include the `promotion` object described in [receipt schema](receipt-schema.md).
+The release receipt must use schema v5 and include the `promotion` and
+`capability_reachability` objects described in [receipt schema](receipt-schema.md).
