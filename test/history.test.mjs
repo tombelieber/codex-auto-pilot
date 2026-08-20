@@ -27,7 +27,7 @@ function tokens(input, cached, output, reasoning, total) {
 
 function validPrReceipt() {
   return {
-    schema_version: 6,
+    schema_version: 7,
     mode: 'pr',
     terminal_state: 'pr_ready',
     plan: {source: 'docs/plan.md', approved: true},
@@ -172,7 +172,7 @@ ${routingMarker(independentImplementation(), {
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
-test('a valid v6 receipt remains valid when routing metadata is missing', async () => {
+test('a valid v7 receipt remains valid when routing metadata is missing', async () => {
   const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-history-routing-unknown-'))
   const dataRoot = join(root, 'data')
   const transcript = join(root, 'root.jsonl')
@@ -306,7 +306,7 @@ test('history rejects a shallow receipt that bypasses the full validator', async
   const receipt = join(root, 'receipt.json')
   try {
     writeFileSync(transcript, jsonl(tokens(10, 0, 1, 0, 11)))
-    writeFileSync(receipt, JSON.stringify({schema_version: 6, mode: 'pr', terminal_state: 'pr_ready'}))
+    writeFileSync(receipt, JSON.stringify({schema_version: 7, mode: 'pr', terminal_state: 'pr_ready'}))
     await handleHookEvent({
       hook_event_name: 'UserPromptSubmit', session_id: 'session-shallow', turn_id: 'turn-shallow',
       prompt: '$auto-pilot pr docs/plan.md', transcript_path: transcript,

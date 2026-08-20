@@ -24,7 +24,7 @@ function receipt(state = 'pr_ready') {
   const released = state === 'released'
   const merged = state === 'merged_main' || released
   const value = {
-    schema_version: 6,
+    schema_version: 7,
     mode: merged ? 'release' : 'pr',
     terminal_state: state,
     plan: {source: 'docs/plan.md', approved: true},
@@ -47,6 +47,13 @@ function receipt(state = 'pr_ready') {
       candidate_base_sha: baseSha,
       candidate_head_sha: headSha,
       authority_evidence: 'Explicit current invocation: $auto-pilot release PR #1',
+    }
+    value.cleanup = {
+      status: 'passed',
+      worktree: 'removed',
+      local_branch: 'deleted',
+      remote_branch: 'deleted',
+      evidence: 'Clean merged task worktree removed; metadata pruned; branches absent',
     }
   }
   if (released) {
@@ -131,6 +138,24 @@ test('rejects production mutation in PR mode receipt', () => {
 test('rejects release without fresh promotion evidence', () => {
   const value = receipt('released')
   delete value.promotion
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects merged completion without automatic worktree cleanup evidence', () => {
+  const value = receipt('merged_main')
+  delete value.cleanup
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects released completion with a retained worktree', () => {
+  const value = receipt('released')
+  value.cleanup.worktree = 'retained'
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects cleanup evidence in PR mode', () => {
+  const value = receipt()
+  value.cleanup = receipt('released').cleanup
   assert.equal(run(value).status, 1)
 })
 

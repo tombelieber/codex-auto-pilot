@@ -20,7 +20,7 @@ const releaseMessage = `### Release
 
 function releasedReceipt() {
   return {
-    schema_version: 6,
+    schema_version: 7,
     mode: 'release',
     terminal_state: 'released',
     plan: {source: 'docs/plan.md', approved: true},
@@ -37,6 +37,13 @@ function releasedReceipt() {
       source: 'live_pr', source_receipt: null, candidate_base_sha: baseSha,
       candidate_head_sha: headSha,
       authority_evidence: 'Explicit current invocation: $auto-pilot release PR #1',
+    },
+    cleanup: {
+      status: 'passed',
+      worktree: 'removed',
+      local_branch: 'deleted',
+      remote_branch: 'deleted',
+      evidence: 'Clean merged task worktree removed; metadata pruned; branches absent',
     },
     capability_reachability: {
       deployed_candidate_sha: mergeSha,

@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Codex Auto Pilot",
     "shortDescription": "Build a verified PR and close releases with notes",
-    "longDescription": "Uses one controller, one declared accountable implementation lane, optional bounded helpers, one compact handoff, and an optional ship lane that starts a separate fresh release task after PR readiness. Released runs require canonical notes and a final linked release message; local worktree removal remains explicit and safety-checked.",
+    "longDescription": "Uses one controller, one declared accountable implementation lane, optional bounded helpers, one compact handoff, and an optional ship lane that starts a separate fresh release task after PR readiness. Released runs require canonical notes and a final linked release message; merged task worktrees are removed automatically only after fail-closed safety checks.",
     "developerName": "tombelieber",
     "category": "Productivity",
     "capabilities": ["Write", "Git", "Release"],

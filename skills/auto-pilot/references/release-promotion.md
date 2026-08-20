@@ -64,15 +64,23 @@ prune` only clears administrative records for directories that are already
 missing.
 
 - Keep an open-PR, incomplete-release, or blocked worktree.
-- After `merged_main` or `released`, retain the local worktree and branch by
-  default and report that they remain. Do not silently imply cleanup.
-- Only an explicit cleanup request authorizes removal. Re-read the real
-  worktree status, locks, ignored/untracked state, upstream reachability, merged
-  PR state, and remote-base ancestry. Stop on any uncertainty.
-- Run removal from outside the target worktree. Use `git worktree remove`, then
-  `git worktree prune`; never use raw recursive filesystem deletion. Delete the
-  local branch with safe merged-branch semantics, and delete the remote branch
-  only when repository policy or the explicit request permits it.
+- After the exact PR reaches merged state, automatically clean only the
+  task-owned release/delivery worktree and branch before reporting
+  `merged_main` or `released`.
+- Persist the temporary receipt and all terminal evidence outside the target
+  worktree first. Then re-read the real worktree status, lock state,
+  ignored/untracked state, upstream push state, PR merge state, and remote-base
+  ancestry. Every task commit must be reachable from the remote base.
+- Run removal from the primary checkout or another stable directory, never from
+  inside the target worktree. Use `git worktree remove`, then `git worktree
+  prune`; never use raw recursive filesystem deletion or force removal.
+- Safe-delete the local branch. Delete the remote branch when it exists and
+  repository policy permits; otherwise record `absent`, `not_used`, or
+  `retained_by_policy` explicitly.
+- If ownership is uncertain, the worktree is dirty or locked, a commit is not
+  pushed/reachable, or any cleanup command fails, keep the worktree and return
+  `blocked` with exact evidence. A live release may be reported as already live
+  inside that blocked result, but cleanup is part of Auto Pilot completion.
 
 ## Terminal result
 
@@ -80,6 +88,6 @@ missing.
 - `released`: merge, production mutation, and post-release evidence all succeeded.
 - `blocked`: record the exact candidate, last safe boundary, remote state, and next authorized action.
 
-The release receipt must use schema v6 and include the `promotion` and
-`capability_reachability` objects plus the canonical `release.notes_url` and
-exact final-response `release.message` described in [receipt schema](receipt-schema.md).
+The release receipt must use schema v7 and include the `promotion`, `cleanup`,
+and `capability_reachability` objects plus the canonical `release.notes_url`
+and exact final-response `release.message` described in [receipt schema](receipt-schema.md).

@@ -178,11 +178,12 @@ It starts from the live candidate, merges through the repository's normal protec
 
 Each session reports one terminal state: the PR controller reports `pr_ready` or `blocked`; the fresh release controller reports `merged_main`, `released`, or `blocked`. Its completion receipt records plan, Git, criteria, checks, PR/release evidence, exact release capability reachability, and blockers without copying model reasoning. A successful deployment with missing reachability proof remains `blocked`, not `released`.
 
-Local worktree cleanup is separate from delivery. Auto Pilot keeps the PR or
-release worktree by default after merge/release; GitHub remote-branch deletion
-does not remove it. Delete it only on an explicit cleanup request after fresh
-checks prove the worktree clean, unlocked, merged, and fully reachable from the
-remote base.
+After a successful merge or release, Auto Pilot automatically closes the
+task-owned local workspace: it verifies the worktree is clean, unlocked,
+merged, pushed, and reachable from the remote base; removes it with Git from
+outside the target directory; prunes stale metadata; and safe-deletes the task
+branch. Remote-branch deletion remains subject to repository policy. It never
+force-removes a worktree; an unsafe or failed cleanup makes the run `blocked`.
 
 ## Local run history
 

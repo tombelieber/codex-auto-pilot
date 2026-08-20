@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate an Auto Pilot version 6 completion receipt."""
+"""Validate an Auto Pilot version 7 completion receipt."""
 
 import json
 import re
@@ -146,6 +146,31 @@ def validate_promotion(value, git_value=None):
     return value
 
 
+def validate_cleanup(value, require_success):
+    value = obj(value, "cleanup")
+    status = value.get("status")
+    allowed_statuses = {"passed"} if require_success else {"passed", "failed", "not_run"}
+    if status not in allowed_statuses:
+        die("cleanup.status is unsupported")
+
+    terminal_states = {
+        "worktree": {"removed", "not_used"},
+        "local_branch": {"deleted", "not_used"},
+        "remote_branch": {"deleted", "absent", "not_used", "retained_by_policy"},
+    }
+    incomplete_states = {
+        "worktree": {"retained"},
+        "local_branch": {"retained"},
+        "remote_branch": {"retained"},
+    }
+    for key, terminal in terminal_states.items():
+        allowed = terminal if status == "passed" else terminal | incomplete_states[key]
+        if value.get(key) not in allowed:
+            die(f"cleanup.{key} is unsupported for cleanup.status {status}")
+    text(value.get("evidence"), "cleanup.evidence")
+    return value
+
+
 def validate_proof(value, name, require_success):
     value = obj(value, name)
     allowed = {"passed"} if require_success else {"passed", "failed", "not_run"}
@@ -227,6 +252,8 @@ def validate_optional_blocked(root):
         validate_release(root["release"], True)
     if "promotion" in root:
         validate_promotion(root["promotion"], git_value)
+    if "cleanup" in root:
+        validate_cleanup(root["cleanup"], False)
     if "capability_reachability" in root:
         validate_capability_reachability(root["capability_reachability"], False)
 
@@ -239,8 +266,8 @@ def validate(path):
     except json.JSONDecodeError as exc:
         die(f"invalid JSON at line {exc.lineno}, column {exc.colno}")
 
-    if root.get("schema_version") != 6:
-        die("schema_version must be 6")
+    if root.get("schema_version") != 7:
+        die("schema_version must be 7")
     mode = root.get("mode")
     terminal = root.get("terminal_state")
     if mode not in {"pr", "release"}:
@@ -291,6 +318,8 @@ def validate(path):
             die("pr_ready requires release status not_requested and null release artifacts")
         if "promotion" in root:
             die("pr_ready must not contain promotion evidence")
+        if "cleanup" in root:
+            die("pr_ready must not contain release cleanup evidence")
         if "capability_reachability" in root:
             die("pr_ready must not contain production capability reachability evidence")
         return terminal
@@ -298,6 +327,7 @@ def validate(path):
     if mode != "release":
         die("merged_main and released require mode release")
     validate_promotion(root.get("promotion"), git_value)
+    validate_cleanup(root.get("cleanup"), True)
     if pull_request.get("merged") is not True or pull_request.get("status") != "merged":
         die("release mode requires a merged PR/MR")
     merge_sha = full_git_sha(pull_request.get("merge_sha"), "pull_request.merge_sha")

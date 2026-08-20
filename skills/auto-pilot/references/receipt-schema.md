@@ -1,10 +1,10 @@
 # Completion Receipt
 
-Create a temporary JSON document with this version 6 shape. It records delivery and authority evidence, not model or orchestration choices.
+Create a temporary JSON document with this version 7 shape. It records delivery and authority evidence, not model or orchestration choices.
 
 ```json
 {
-  "schema_version": 6,
+  "schema_version": 7,
   "mode": "pr",
   "terminal_state": "pr_ready",
   "plan": { "source": "docs/approved-plan.md", "approved": true },
@@ -40,8 +40,8 @@ Create a temporary JSON document with this version 6 shape. It records delivery 
 Successful receipts require an approved plan, non-empty summary, at least one commit, one passed criterion, one evidenced check, a valid PR/MR URL, and no blockers.
 
 - `pr_ready`: mode `pr`; PR is open or ready, unmerged, release is `not_requested`, and `promotion` is absent.
-- `merged_main`: mode `release`; PR is merged with a merge SHA, no deployment mechanism exists, and release is `no_mechanism`.
-- `released`: mode `release`; PR is merged, release is `passed`, release and canonical-notes URLs exist, the exact final-response release message links those notes, and exact capability reachability is proven for the deployed merge commit.
+- `merged_main`: mode `release`; PR is merged with a merge SHA, no deployment mechanism exists, release is `no_mechanism`, and task-worktree cleanup passed.
+- `released`: mode `release`; PR is merged, release is `passed`, release and canonical-notes URLs exist, the exact final-response release message links those notes, exact capability reachability is proven for the deployed merge commit, and task-worktree cleanup passed.
 - `blocked`: at least one blocker with `reason` and `evidence`; delivery sections may be omitted.
 
 A successful release-mode receipt must add this object:
@@ -57,6 +57,27 @@ A successful release-mode receipt must add this object:
 ```
 
 `source` is `live_pr` or `pr_ready_receipt`. For `pr_ready_receipt`, set `source_receipt` to the receipt path or immutable receipt identity; otherwise it must be null. `candidate_head_sha` must be the full live pre-merge PR head and must appear in `git.commits`. A receipt is evidence only: `authority_evidence` must identify the fresh current promotion invocation.
+
+A successful release-mode receipt must also record automatic closeout:
+
+```json
+"cleanup": {
+  "status": "passed",
+  "worktree": "removed",
+  "local_branch": "deleted",
+  "remote_branch": "deleted",
+  "evidence": "Verified clean/unlocked status and remote-base reachability; removed the task worktree from the primary checkout; pruned metadata; task branches are absent"
+}
+```
+
+`worktree` is `removed` or `not_used`; `local_branch` is `deleted` or
+`not_used`; `remote_branch` is `deleted`, `absent`, `not_used`, or
+`retained_by_policy`. Successful `merged_main` and `released` receipts require
+`cleanup.status: passed` and one of those terminal states. Create and retain the
+temporary receipt outside the target worktree before removal. A dirty, locked,
+unowned, unpushed, unreachable, force-required, or otherwise failed cleanup
+must use terminal state `blocked`; it may record `cleanup.status` as `failed` or
+`not_run` and `worktree`/`local_branch` as `retained`.
 
 A `released` receipt must also add at least one impact-selected reachability
 case. Do not add this object to `pr_ready` or `merged_main` receipts:

@@ -8,7 +8,7 @@ _Checked 2026-08-21 against first-party repositories and documentation only. Mol
 
 ## Decision for Auto Pilot
 
-1. **Do not automatically delete a local worktree merely because its PR merged or its release shipped.** GitHub can delete a merged PR’s remote head branch when that repository setting is enabled, but that is a remote-branch operation, not local-worktree disposal.[^github-branch-delete] Git itself says a linked worktree is removed with `git worktree remove`; `prune` only removes administrative records for worktree directories that are already missing.[^git-worktree] Mole adopts an even stricter product rule: worktree staleness is not safely decidable, so it removes only whitelisted rebuildable artifacts inside a worktree and never the whole worktree.[^mole-worktree]
+1. **Mole does not automatically delete a local worktree merely because its PR merged or its release shipped.** GitHub can delete a merged PR’s remote head branch when that repository setting is enabled, but that is a remote-branch operation, not local-worktree disposal.[^github-branch-delete] Git itself says a linked worktree is removed with `git worktree remove`; `prune` only removes administrative records for worktree directories that are already missing.[^git-worktree] Mole adopts an even stricter product rule: worktree staleness is not safely decidable, so it removes only whitelisted rebuildable artifacts inside a worktree and never the whole worktree.[^mole-worktree] **Auto Pilot intentionally differs by user decision:** after a verified merge, it automatically removes only its own clean, unlocked, pushed, remote-reachable worktree and fails closed instead of force-removing an uncertain one.
 2. **Treat the release note as part of release completion, not optional copy.** Mole’s tag workflow creates a stable release with `generate_release_notes: false`; curated notes are a required follow-up using `gh release edit`.[^mole-workflow-release][^mole-notes-publish] For Auto Pilot, a run should not report `released` until the repository’s release note exists, the release URL is known, and the final response ends with a compact release message linking to it.
 3. **Keep artifact publication, release qualification, and announcement as separate gates.** Mole verifies assets, checksums, and a real previous-version self-update before publishing notes or announcing the release; Homebrew remains a separately verified downstream channel.[^mole-post-release]
 
@@ -39,16 +39,20 @@ The authoring contract also requires reading the latest stable body before draft
 
 ### Worktree lifecycle
 
-Use these states, and keep cleanup outside the meaning of `released`:
+Use these Auto Pilot states. This deliberately adopts a narrower, provenance-
+checked automatic cleanup policy than Mole:
 
 | State | Worktree action |
 |---|---|
 | PR open or release incomplete | Keep it. |
-| PR merged / release shipped | Keep it by default; report its path. |
-| Explicit cleanup requested | Re-read status from the real worktree, refuse on dirty, unpushed, locked, or uncertain ignored state, then use `git worktree remove <path>` rather than raw filesystem deletion.[^git-worktree][^mole-worktree] |
+| PR merged / release shipped | Automatically remove only the task-owned worktree after proving it clean, unlocked, pushed, and reachable from the remote base; otherwise report `blocked`. |
+| Cleanup eligible | Persist evidence outside the target, run from the primary checkout, use `git worktree remove <path>` rather than raw filesystem deletion, prune metadata, and safe-delete branches.[^git-worktree][^mole-worktree] |
 | Directory is already missing | `git worktree prune` may remove stale administrative metadata; it is not the command for deciding or deleting a live worktree.[^git-worktree] |
 
-This separates two different outcomes: **delivery succeeded** and **local workspace was removed**. A release can be complete while cleanup remains intentionally unperformed.
+This still separates two facts—**delivery reached production** and **local
+workspace cleanup passed**—but Auto Pilot requires both before its terminal
+result can be `released`. If cleanup fails after production is live, the run is
+`blocked` and must report both truths.
 
 ### Release completion gates
 
