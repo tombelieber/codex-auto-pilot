@@ -15,7 +15,8 @@ const intended = [
 ].sort()
 
 test('npm pack contains exactly the intended minimal public files', () => {
-  const packed = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json'], {encoding: 'utf8'}))
+  const output = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json'], {encoding: 'utf8'}))
+  const packed = Array.isArray(output) ? output : Object.values(output)
   assert.equal(packed.length, 1)
   assert.deepEqual(packed[0].files.map((file) => file.path).sort(), intended)
 })

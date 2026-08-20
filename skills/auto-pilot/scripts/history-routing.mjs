@@ -1,4 +1,4 @@
-const ROUTING_SCHEMA_VERSION = 1
+const ROUTING_SCHEMA_VERSION = 2
 const ROUTING_MARKER = /<!--\s*auto-pilot-routing:\s*(\{[^\r\n]*\})\s*-->/gi
 const CREATED_THREAD_DIRECTIVE = /::created-thread\{([^}]*)\}/g
 const TASK_REFERENCE = /(?:threadId|clientThreadId)="([^"]+)"/
@@ -10,6 +10,7 @@ const CONTINUATION_LANES = new Set(['fresh_release_task', 'reused_release_task',
 export function auditRouting({message, manifest, subagents = 0}) {
   const createdThreadRefs = createdThreadReferences(message)
   const parsed = parseRoutingMarker(message)
+  const unverified = leafDepthEvidence(subagents)
   if (parsed.status !== 'valid') {
     return {
       schema_version: ROUTING_SCHEMA_VERSION,
@@ -18,6 +19,7 @@ export function auditRouting({message, manifest, subagents = 0}) {
       declared: null,
       created_thread_refs: createdThreadRefs,
       observed_subagents: subagents,
+      unverified,
       deviations: parsed.error ? [parsed.error] : ['routing marker missing'],
     }
   }
@@ -31,7 +33,7 @@ export function auditRouting({message, manifest, subagents = 0}) {
     const implementationResult = auditImplementation({declared, manifest, subagents, createdThreadRefs, deviations})
     const continuationResult = auditContinuation({declared, manifest, message, createdThreadRefs, deviations})
     fallback = implementationResult.fallback || continuationResult.fallback
-    auditCreatedTaskAccounting({declared, manifest, createdThreadRefs, deviations})
+    auditCreatedTaskAccounting({declared, manifest, createdThreadRefs, deviations, unverified})
     if (
       manifest.mode !== 'release'
       && manifest.continuation === 'release'
@@ -49,6 +51,7 @@ export function auditRouting({message, manifest, subagents = 0}) {
     declared,
     created_thread_refs: createdThreadRefs,
     observed_subagents: subagents,
+    unverified,
     deviations,
   }
 }
@@ -67,7 +70,7 @@ export function parseRoutingMarker(message) {
 
 function auditImplementation({declared, manifest, subagents, createdThreadRefs, deviations}) {
   const value = declared.implementation
-  const executor = manifest.routing_config?.implementation?.substantive_executor || 'task'
+  const executor = manifest.routing_config?.implementation?.substantive_executor || 'auto'
   const collaboration = manifest.routing_config?.collaboration?.policy || 'auto'
   let fallback = false
 
@@ -160,7 +163,7 @@ function requireTaskEvidence(value, createdThreadRefs, label, deviations) {
   if (value.task_ref && !createdThreadRefs.includes(value.task_ref)) deviations.push(`${label} task_ref has no matching created-thread directive`)
 }
 
-function auditCreatedTaskAccounting({declared, manifest, createdThreadRefs, deviations}) {
+function auditCreatedTaskAccounting({declared, manifest, createdThreadRefs, deviations, unverified}) {
   const declaredRefs = []
   if (declared.implementation.lane === 'independent_task' && declared.implementation.task_ref) {
     declaredRefs.push(declared.implementation.task_ref)
@@ -173,7 +176,17 @@ function auditCreatedTaskAccounting({declared, manifest, createdThreadRefs, devi
   ) declaredRefs.push(declared.continuation.task_ref)
 
   const unexpected = createdThreadRefs.filter((reference) => !declaredRefs.includes(reference))
-  if (unexpected.length) deviations.push(`created task directive is not accounted for by a declared lane: ${unexpected.join(', ')}`)
+  if (!unexpected.length) return
+  if (manifest.mode !== 'release' && declared.implementation.lane === 'independent_task') {
+    unverified.push(`additional owner-stage relationships are not exposed by the current routing marker: ${unexpected.join(', ')}`)
+    return
+  }
+  deviations.push(`created task directive is not accounted for by a declared lane: ${unexpected.join(', ')}`)
+}
+
+function leafDepthEvidence(subagents) {
+  if (subagents < 1) return []
+  return ['agent parent-child delegation depth is not exposed by the current history hooks']
 }
 
 function preferenceFallback(value, expected, label, deviations) {

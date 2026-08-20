@@ -1,53 +1,83 @@
-# PR-stage delegated implementation
+# Owner-directed PR execution
 
-Use one controller-implementer relay for substantive implementation. Keep the active controller responsible for repository truth, final quality, and PR delivery.
+Keep one Sol owner accountable for the approved goal, repository truth, final
+quality, and PR delivery. Direct execution is valid for any scope the owner can
+reliably finish in its current session. Fresh stages and leaf workers are
+optional context-management tools, not the default substantive route.
 
 ```text
 approved artifact
-  -> controller: minimal truth refresh and dispatch
-  -> one declared primary lane: implement and hand off once
-  -> controller: review once, patch, verify, and open the PR
+  -> Sol owner: resolve truth and choose the execution shape
+  -> direct work, optional fresh owner stages, or optional leaf workers
+  -> owner: integrate, review once, verify, and open the PR
   -> terminal pr_ready; no merge or production mutation
 ```
 
-## Choose the lane
+## Let the owner choose
 
-Implement directly when the work is tiny, localized, and faster to verify than to hand off, such as a typo, one-line configuration fix, or narrow test expectation. Treat these as examples, not numeric thresholds.
+Treat `tiny` and `substantive` as advisory scope metadata. They do not require a
+handoff, a fresh task, a subagent, or a particular model. With the default
+`implementation.substantive_executor=auto`, the active owner decides whether
+the expected context cost or useful parallelism justifies another execution
+context.
 
-Delegate when the approved scope contains meaningful code implementation whose repeated tool loop would cost more than one compact handoff. The default substantive lane is one user-visible independent Codex task. The explicit `$auto-pilot` invocation authorizes that task as part of the PR stage.
+An explicit `direct`, `task`, or `subagent` executor preference still overrides
+that default. State the resolved preference before dispatch, and record the
+actual route. An independent user-visible task and an in-turn collaboration
+subagent remain different execution kinds; never present one as the other.
 
-A collaboration subagent is a distinct execution kind, not an equivalent name for an independent task. Use one as the primary implementer only when the resolved `substantive_executor` is `subagent` or `auto`, and declare that lane before dispatch. Use direct controller execution when the resolved executor is `direct`, the work is tiny, or independent task creation fails and the controller can safely finish without changing authority.
+Native context compaction continues the same session and stage. Creating a new
+session creates a new stage. If an owner deliberately hands unfinished work to
+a clean session, record the earlier stage as `continued`, pass repository state
+plus a compact handoff, and let the new stage own the remaining outcome. Normal
+compaction alone is not a reason to create that stage.
 
-The active controller or implementer may use bounded collaboration helpers when the resolved collaboration policy is `auto`, useful work can continue in parallel, the packet is independently verifiable, and write ownership does not overlap. Do not turn helpers into preparation, status, separate reviewer, or repair stages. Never split the primary implementation into waves unless the approved artifact itself requires independently owned packets and the user explicitly requests that split.
+## Conditional leaf-worker contract
 
-## Prepare the implementer
+Do not prescribe worker use, worker count, or wave cadence. If an owner session
+independently chooses collaboration, resolve the configured leaf-model
+preference and give every spawned helper exactly one role:
 
-1. Fetch remote truth and resolve the exact latest default-branch SHA without pre-reading the full implementation surface in the controller.
-2. Resolve configuration and state the selected primary lane, model/thinking preference, worktree mode, and collaboration policy in one concise commentary update. Do not ask for confirmation.
-3. For the default task lane, discover lazy-loaded thread tools before claiming they are unavailable. Use the product's project listing, task creation, and bounded wait tools to start one user-visible task in a new isolated worktree and task branch at the resolved SHA.
-4. Use the resolved implementation model and thinking settings; the built-in preference is `gpt-5.6-terra` with `ultra`. If the configured combination is unavailable, disclose the model fallback. If independent task creation itself is unavailable or fails, finish directly in the controller when safe; never silently substitute a collaboration subagent.
-5. For an explicitly selected primary subagent lane, use a fresh context and a dedicated worktree for writes. State that it is an in-turn collaboration subagent, not a user-visible Codex task.
-6. Give the implementer the complete approved artifact, repository path, base SHA, owned branch or files, relevant instructions, and required focused verification.
-7. Preflight filesystem and network access when implementation requires them. Capability does not grant merge, release, production, secret, billing, or destructive-data authority.
+- `stage_owner`: owns a bounded stage and may choose its own leaf workers;
+- `leaf_worker`: owns only its assigned packet and must not spawn, fork, create
+  another task, or delegate to another agent.
 
-## Bound implementation authority
+The rule is role-scoped, not raw task-tree depth. A fresh stage owner may itself
+be a child task and may still spawn leaf workers. A leaf worker may not. Put the
+no-delegation rule in every leaf prompt because the current Codex runtime does
+not expose a repository-controlled hard depth switch.
 
-Tell the implementer to:
+Keep write ownership explicit. Parallel writers must own non-overlapping paths
+or isolated worktrees; when work overlaps, the owner should integrate it rather
+than relying on concurrent mutation. A leaf never becomes the PR or release
+authority.
 
-- implement the complete approved scope and directly causal fixes;
-- preserve unrelated work and follow repository instructions;
-- run focused local verification;
-- commit scoped changes and push only its task branch when repository policy permits; and
-- return the base SHA, branch, head SHA, changed paths, checks, failures, and blockers.
+After the owner-selected work finishes, fan results back to the owner. Review
+the integrated candidate once rather than reviewing each worker, commit, or
+partial change. The same owner may perform that consolidated review, or it may
+choose a fresh review stage when a clean context materially helps.
 
-The implementer must not change the approved product contract, open or merge the final PR, release, deploy, migrate production data, rotate secrets, or clean resources owned by another task.
+## Fresh owner-stage handoff
 
-Return exactly one compact handoff. Treat the repository and Git objects as shared immutable truth; do not copy the controller conversation, implementation reasoning, or full command logs.
+When the owner chooses a fresh stage, bind it to the approved artifact and real
+Git state. Provide only the information needed to continue:
+
+1. approved artifact and relevant repository instructions;
+2. repository path, base SHA, owned branch or worktree, and bounded scope;
+3. current completed and remaining outcomes;
+4. focused verification required by repository policy; and
+5. explicit authority boundaries.
+
+The receiving owner must preserve unrelated work, implement the owned outcome,
+run focused verification, and return repository evidence rather than copied
+conversation history or hidden reasoning.
 
 ```json
 {
-  "plan": {"source": "path", "sha256": "..."},
+  "objective": "bounded stage outcome",
   "git": {"base_sha": "...", "branch": "...", "head_sha": "..."},
+  "completed": ["..."],
+  "remaining": ["..."],
   "changed_paths": ["..."],
   "checks": [{"name": "...", "status": "passed", "evidence": "..."}],
   "failures": [],
@@ -56,18 +86,20 @@ Return exactly one compact handoff. Treat the repository and Git objects as shar
 }
 ```
 
-## Wait, then take over once
+## Consolidate and deliver
 
-Let the selected primary implementer run to a terminal handoff. Use one terminal notification or bounded wait mechanism; do not poll through repeated model turns. Do not review partial diffs, repeatedly redirect it, or bounce fixes between tasks. Intervene only for a genuine product decision, authority boundary, blocker, or clear scope violation.
+The accountable PR owner must:
 
-After handoff, the controller must:
+1. verify every returned branch or head against the expected base;
+2. inspect the complete integrated diff and runtime wiring;
+3. perform one consolidated correctness, architecture, security, performance,
+   and test-quality review;
+4. patch findings without creating a review ping-pong loop; and
+5. run exact-candidate gates, create the PR, validate a `pr_ready` receipt, and
+   stop without merging or mutating production.
 
-1. Verify the reported branch and head against the expected base.
-2. Inspect the complete diff and integration wiring.
-3. Perform one consolidated review for correctness, readability, architecture, security, performance, and test quality.
-4. Patch all findings directly instead of starting a review loop with the implementer.
-5. Run exact-candidate gates, create the PR, validate a `pr_ready` receipt, and stop without merging or mutating production.
-
-If the implementer fails or stops incomplete, pick up its usable branch and finish in the controller task. Do not start a replacement wave by default.
-
-At final handoff, emit `::created-thread{threadId="<REF>"}` (or `clientThreadId`) for every user-visible implementation task and use the same task reference in the Auto Pilot routing marker. For direct or subagent execution, record the real lane and a short reason. The completion receipt remains about the delivered candidate; orchestration is audited separately by private history.
+Emit `::created-thread{threadId="<REF>"}` (or `clientThreadId`) for every
+user-visible stage task. Record the actual primary implementation lane in the
+Auto Pilot routing marker. Additional owner stages and leaf nesting remain
+best-effort routing evidence when the runtime does not expose their complete
+relationship; mark that evidence unverified instead of inventing certainty.

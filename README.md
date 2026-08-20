@@ -8,93 +8,68 @@ $auto-pilot ship docs/approved-plan.md
 $auto-pilot release https://github.com/owner/repo/pull/123
 ```
 
-Auto Pilot v0.9.0 minimizes contexts without weakening the final review or production boundary. Tiny work stays with the controller. By default, substantive PR work uses one fresh, user-visible independent Codex task in an isolated worktree, then returns one compact handoff to the controller. The built-in preference is `gpt-5.6-terra` with `ultra` thinking for that task; a generated release task prefers `gpt-5.6-sol` with `xhigh`. Those are configurable preferences, not delivery evidence or authority.
+Auto Pilot v0.10.0 keeps one accountable Sol owner in control without forcing an agent team or fresh implementation task. The owner may finish the goal in its current session, or independently choose fresh owner stages and leaf workers when context separation or parallelism materially helps. Reference preferences are `gpt-5.6-sol` with `xhigh` thinking for owner stages and `gpt-5.6-luna` with `max` for optional leaves. These are configurable examples, not delivery evidence or authority.
 
 ## What it does
 
 1. Treats a complete approved artifact as the PR-stage implementation input.
-2. Routes tiny work directly and substantive implementation to one declared accountable lane.
-3. Returns once to the controller for one consolidated review, direct fixes, exact-candidate verification, and PR creation.
+2. Lets the accountable owner choose direct execution or optional fresh stages; `tiny` and `substantive` remain advisory metadata only.
+3. Allows optional leaf workers without recommending them, then returns their results to the owner for one consolidated review, direct fixes, exact-candidate verification, and PR creation.
 4. Stops at an open, unmerged `pr_ready` result with no production mutation.
 5. Promotes only through a fresh release task—started manually with `release`, or automatically after `pr_ready` when the current command explicitly selects `ship`.
 
-An independent Codex task is not a collaboration subagent. Collaboration subagents are optional, bounded helpers with isolated ownership; they never silently replace the primary task or become the release owner. Auto Pilot does **not** create planning, preparation, inventory, status, log-summary, reviewer, or repair agents. Mechanical inventory and verification belong in deterministic repository scripts or bounded tool calls.
+An independent Codex task is not a collaboration subagent. Auto Pilot does not prescribe agent teams, worker counts, or wave cadence. If an owner independently chooses collaboration, every helper is a terminal leaf that must not spawn, fork, create another task, or delegate. A fresh stage owner may itself be a child task and may still choose its own leaves. Mechanical inventory and verification belong in deterministic repository scripts or bounded tool calls.
 
 ## Execution topology
 
-There are at most three primary contexts across a complete PR-to-production lifecycle. Tiny PRs use only the controller. Substantive PRs add one accountable implementation lane. A release controller starts either from a later manual `release` command or automatically after a current `ship` command reaches `pr_ready`.
+The normal path is one accountable Sol owner completing the PR stage in its
+current session. Context separation is an owner-selected scaling pattern, not a
+mandatory classifier result. Native compaction stays inside the same session;
+creating a new session creates a new owner stage.
 
 ```mermaid
 flowchart TB
-    START["User<br/>$auto-pilot pr or ship approved-plan.md"] --> P1
+    START["User<br/>$auto-pilot pr or ship approved-plan.md"] --> OWNER
 
-    subgraph S1["PR controller"]
-        direction TB
-        P1["P1. Read approved plan<br/>Acquire PR-stage authority"]
-        P2["P2. Minimal repository truth refresh<br/>Bind base SHA, scope, and rules"]
-        P3{"P3. Tiny or substantive?"}
-        P4["P4A. Tiny change<br/>Controller implements directly"]
-        P5["P4B. Dispatch declared<br/>implementation lane"]
-        P6["P5. Resume and validate handoff<br/>Branch, head SHA, and checks"]
-        P7["P6. One consolidated review<br/>Correctness, architecture, and security"]
-        P8["P7. Controller patches all findings directly"]
-        P9["P8. Exact-candidate verification"]
-        P10["P9. Commit, push, and open PR"]
-        P11["P10. Validate final pr_ready receipt<br/>with continuation outcome"]
+    subgraph PR["PR stage — accountable Sol owner"]
+        OWNER["Read approved goal<br/>Bind repository truth"]
+        DIRECT["Implement in current session"]
+        REVIEW["One consolidated review<br/>Patch and exact-candidate checks"]
+        OPEN["Commit, push, and open PR"]
 
-        P1 --> P2 --> P3
-        P3 -->|"Tiny"| P4 --> P7
-        P3 -->|"Substantive"| P5
-        P6 --> P7 --> P8 --> P9 --> P10
+        OWNER --> DIRECT --> REVIEW --> OPEN
     end
 
-    subgraph S2["Fresh independent implementation task (default substantive lane)"]
-        direction TB
-        T1["T1. Create isolated worktree<br/>Bind the supplied base SHA"]
-        T2["T2. Read the approved plan and owned scope"]
-        T3["T3. Implement the complete approved scope"]
-        T4["T4. Run focused checks and causal fixes"]
-        T5["T5. Commit and push the task branch"]
-        T6["T6. Return one compact handoff<br/>Session 2 ends"]
+    STAGE["Optional fresh owner stage<br/>Same goal, compact Git handoff"]
+    LEAF["Optional terminal leaf worker<br/>Must not spawn or delegate"]
+    STAGE_LEAF["Optional terminal leaf<br/>Must not spawn or delegate"]
 
-        T1 --> T2 --> T3 --> T4 --> T5 --> T6
-    end
+    OWNER -.-> STAGE
+    OWNER -.-> LEAF
+    STAGE -.-> STAGE_LEAF
+    LEAF -->|"Return bounded result"| OWNER
+    STAGE_LEAF -->|"Return bounded result"| STAGE
+    STAGE -->|"Repository state + compact handoff"| REVIEW
 
-    P5 -->|"Plan + base SHA<br/>scope + required checks"| T1
-    T6 -->|"Branch + head SHA<br/>changed paths + checks + risks"| P6
-    P10 --> CONTINUE{"Release continuation authorized?"}
-    CONTINUE -->|"No: pr"| P11
-    CONTINUE -->|"Yes: ship"| DISPATCH["Create one fresh task or reuse<br/>the exact release task for this PR head"]
-    DISPATCH --> P11
-    P11 --> READY["Open, unmerged PR<br/>PR controller ends"]
-    READY -.->|"Optional later command"| MANUAL["User<br/>$auto-pilot release PR-URL"]
-
-    subgraph S3["Fresh release task"]
-        direction TB
-        R1["R1. Acquire fresh release authority"]
-        R2["R2. Read live PR state<br/>Never rely on Session 1 conversation"]
-        R3["R3. Bind base/head SHA<br/>checks, reviews, and mergeability"]
-        R4["R4. Compatibility proof and dry-run<br/>Reuse only hash-matched evidence"]
-        R5["R5. Protected merge"]
-        R6["R6. Run repository migration/deploy harness"]
-        R7["R7. Verify real production"]
-        R8["R8. Validate released/merged/blocked receipt<br/>Session 3 ends"]
-
-        R1 --> R2 --> R3 --> R4 --> R5 --> R6 --> R7 --> R8
-    end
-
-    DISPATCH --> R1
-    MANUAL --> R1
+    OPEN --> CONTINUE{"Release continuation authorized?"}
+    CONTINUE -->|"No: pr"| READY["Open, unmerged PR<br/>pr_ready"]
+    CONTINUE -->|"Yes: ship"| RELEASE["Fresh Sol release task<br/>Live candidate → merge → proof"]
+    READY -.-> RELEASE
 ```
 
-| Work | PR controller | Implementation lane | Release task |
-|---|---:|---:|---:|
-| Tiny PR | Required | Not created | Not created |
-| Substantive PR (default) | Required | One independent task, isolated worktree | Not created |
-| One-command `ship` | Required | Only if substantive | One fresh task after `pr_ready`, unless exact continuation exists |
-| Later manual promotion | Already ended | Already ended | Required |
+| Execution shape | When used | Ownership |
+|---|---|---|
+| Direct | Owner can reliably finish in the current context | Current Sol owner |
+| Fresh owner stage | Owner judges clean context separation useful | New Sol owner stage |
+| Leaf worker | Any owner independently judges a bounded packet useful | Terminal leaf; no delegation |
+| Release task | Explicit `ship` or later `release` authority | Fresh Sol release owner |
 
-The controller-to-implementer input contains the approved plan, base SHA, owned scope, and required checks. The only return handoff contains Git identities, changed paths, check evidence, risks, and blockers—not copied conversation history or hidden reasoning. `ship` does not carry the PR conversation into release: it creates one fresh task for a PR head, or reuses the exact existing continuation task for that same head.
+Fresh-stage handoffs contain the approved goal, Git identities, completed and
+remaining outcomes, changed paths, check evidence, risks, and blockers—not
+copied conversation history or hidden reasoning. A continuation stage is a new
+owner stage, not a failure. `ship` likewise does not carry the PR conversation
+into release: it creates one fresh task for a PR head, or reuses the exact
+existing continuation task for that same head.
 
 ## Install
 
@@ -140,15 +115,15 @@ Preferences resolve in this order: current invocation flags, optional user confi
 
 ```json
 {
-  "implementation": {"substantive_executor": "task", "model": "gpt-5.6-terra", "thinking": "ultra"},
+  "implementation": {"substantive_executor": "auto", "model": "gpt-5.6-sol", "thinking": "xhigh"},
   "release": {"model": "gpt-5.6-sol", "thinking": "xhigh"},
-  "collaboration": {"policy": "auto"}
+  "collaboration": {"policy": "auto", "model": "gpt-5.6-luna", "thinking": "max"}
 }
 ```
 
-Invocation overrides are `--implementation-executor`, `--implementation-model`, `--implementation-thinking`, `--release-model`, `--release-thinking`, and `--collaboration`. See the full [configuration reference](skills/auto-pilot/references/configuration.md).
+Invocation overrides are `--implementation-executor`, `--implementation-model`, `--implementation-thinking`, `--release-model`, `--release-thinking`, `--collaboration`, `--collaboration-model`, and `--collaboration-thinking`. See the full [configuration reference](skills/auto-pilot/references/configuration.md).
 
-`task` is the default substantive executor. `direct`, `subagent`, and `auto` are explicit routing choices; a primary collaboration subagent must be declared, requires collaboration not to be `off`, and is never presented as an independent task. If a user-visible task interface is unavailable, the controller may implement directly and records that disclosed fallback. If a fresh release task interface is unavailable, the PR controller stops at `pr_ready` and returns the exact `$auto-pilot release <PR URL>` command; it never releases in place.
+`auto` leaves execution-shape selection with the accountable owner; it does not actively recommend a task or agent team. `task`, `direct`, and `subagent` remain explicit overrides. Collaboration `auto` only makes leaf workers available if an owner independently chooses them. Every leaf is terminal and may not delegate. If a fresh release task interface is unavailable, the PR owner stops at `pr_ready` and returns the exact `$auto-pilot release <PR URL>` command; it never releases in place.
 
 ## Delivery modes
 
@@ -208,17 +183,17 @@ The archive lives at `~/.codex-auto-pilot/history` by default. Override it with 
 
 ## Is this topology optimal?
 
-It is the current **structurally optimized candidate**, not a universal or statistically proven optimum. It minimizes handoffs subject to three non-negotiable constraints: an independent substantive implementation context by default, one final reviewer/fixer, and a fresh production-authority boundary. Automatic `ship` removes a user round trip without merging the PR and release contexts.
+It is the current **owner-decided reference topology**, not a universal or statistically proven optimum. It preserves three non-negotiable constraints: one accountable owner for each active stage, terminal leaf workers that never delegate, and a fresh production-authority boundary. It does not force context separation merely because scope metadata says `substantive`. Automatic `ship` removes a user round trip without merging the PR and release contexts.
 
 Verify it from receipt-backed local history rather than intuition:
 
 1. Compare only runs with a valid completion receipt and an identical complete skill-bundle hash.
-2. Cohort comparable work by mode, tiny/substantive route, repository, risk class, and required quality gates.
+2. Cohort comparable work by mode, advisory scope hint, actual execution shape, repository, risk class, and required quality gates.
 3. Measure total lifecycle tokens, uncached input, elapsed time, tool calls, compactions, handoff count, repair work, blocked rate, and terminal quality evidence.
 4. Reject a cheaper topology if it increases escaped defects, incomplete scope, repeated repair loops, or unsafe release outcomes.
 5. Promote a routing change only after several comparable successful runs show a repeatable improvement; never infer causality from one unusually small task.
 
-The collector's benchmark cohort excludes legacy or unverified outcomes. Independent user-visible implementation sessions are not automatically attributable to the parent PR run in every Codex runtime, so a root-only token total must not be presented as the complete cost of a substantive PR. Use explicit linked session evidence before making that comparison.
+The collector's benchmark cohort excludes legacy or unverified outcomes. Independent user-visible owner stages are not automatically attributable to the parent PR run in every Codex runtime, so a root-only token total must not be presented as the complete cost of a staged PR. Use explicit linked session evidence before making that comparison.
 
 ## Privacy and safety
 

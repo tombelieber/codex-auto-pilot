@@ -1,7 +1,7 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.9.0",
-  "description": "Configurable Codex delivery with verified PRs, release notes, and safe automatic worktree cleanup.",
+  "version": "0.10.0",
+  "description": "Owner-directed Codex delivery with verified PRs, terminal leaf workers, and safe release boundaries.",
   "bin": {
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
   },

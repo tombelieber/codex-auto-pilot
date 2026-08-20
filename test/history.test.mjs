@@ -48,7 +48,7 @@ function routingMarker(implementation, continuation) {
 function independentImplementation(taskRef = 'implementation-task') {
   return {
     lane: 'independent_task', task_ref: taskRef, worktree: true,
-    model: 'gpt-5.6-terra', thinking: 'ultra', reason: null,
+    model: 'gpt-5.6-sol', thinking: 'xhigh', reason: null,
   }
 }
 
@@ -106,7 +106,7 @@ test('hooks archive one complete root and subagent run with deterministic metric
       tokens(250, 180, 30, 15, 280),
     ))
     writeFileSync(agentTranscript, jsonl(
-      {type: 'turn_context', payload: {model: 'gpt-5.6-terra', effort: 'high'}},
+      {type: 'turn_context', payload: {model: 'gpt-5.6-luna', effort: 'max'}},
       tokens(80, 50, 10, 5, 90),
     ))
     await handleHookEvent({
@@ -137,7 +137,7 @@ ${routingMarker(independentImplementation(), {
     assert.equal(manifest.mode, 'pr')
     assert.equal(manifest.continuation, 'release')
     assert.deepEqual(manifest.routing_config.implementation, {
-      substantive_executor: 'task', model: 'gpt-5.6-terra', thinking: 'ultra',
+      substantive_executor: 'auto', model: 'gpt-5.6-sol', thinking: 'xhigh',
     })
     assert.match(manifest.skill_bundle_sha256, /^[a-f0-9]{64}$/)
     assert.ok(Object.keys(manifest.skill_bundle_files).includes('SKILL.md'))
@@ -154,10 +154,12 @@ ${routingMarker(independentImplementation(), {
     assert.deepEqual(metrics.tools, {exec_command: 1, exec: 1})
     assert.equal(metrics.compactions, 1)
     assert.equal(metrics.subagents, 1)
-    assert.deepEqual(metrics.subagent_models, {'gpt-5.6-terra': 1})
-    assert.deepEqual(metrics.subagent_efforts, {high: 1})
+    assert.deepEqual(metrics.subagent_models, {'gpt-5.6-luna': 1})
+    assert.deepEqual(metrics.subagent_efforts, {max: 1})
     assert.equal(metrics.effort, 'high')
     assert.equal(metrics.routing.status, 'passed')
+    assert.equal(metrics.routing.schema_version, 2)
+    assert.match(metrics.routing.unverified.join('\n'), /parent-child delegation depth/)
     assert.equal(readFileSync(join(run, 'transcript.jsonl'), 'utf8'), readFileSync(transcript, 'utf8'))
     if (process.platform !== 'win32') {
       assert.equal(statSync(run).mode & 0o777, 0o700)

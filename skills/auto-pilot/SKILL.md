@@ -1,11 +1,13 @@
 ---
 name: auto-pilot
-description: "Deliver one approved software goal through a production-ready PR and, when explicitly requested, automatically continue in one fresh production-release task. Invoke explicitly with $auto-pilot at the start of the prompt. Use pr for PR-only delivery, ship or a clear current release imperative for automatic PR-to-release continuation, and release for an existing PR. Keep one controller, one accountable implementation lane, optional bounded helpers, one compact handoff, and deterministic evidence."
+description: "Deliver one approved software goal through a production-ready PR and, when explicitly requested, continue in one fresh production-release task. Invoke explicitly with $auto-pilot at the start of the prompt. Use pr for PR-only delivery, ship or a clear current release imperative for automatic PR-to-release continuation, and release for an existing PR. Keep one accountable Sol owner, let that owner choose direct work or optional fresh stages and leaf workers, prohibit leaf-to-child delegation, and preserve deterministic delivery evidence."
 ---
 
 # Auto Pilot
 
-Deliver one approved artifact through two deliberately separate stages and the fewest useful contexts:
+Deliver one approved artifact through a verified PR boundary and a deliberately
+separate production-authority boundary. Within either stage, keep one
+accountable owner and let that owner choose the fewest useful contexts:
 
 ```text
 $auto-pilot pr /path/to/approved-plan.md
@@ -15,15 +17,15 @@ $auto-pilot release <PR URL or number>
 
 Put the command at the start of the prompt so private run history records only real executions. `pr` ends at a production-ready PR. `ship` completes that PR, then creates one fresh release task automatically unless the exact continuation already exists. `release` starts directly from an existing candidate. Never merge or mutate production inside the PR controller.
 
-Read [receipt schema](references/receipt-schema.md) before declaring a terminal result. In the PR stage, read [delegated implementation](references/delegated-implementation.md) completely before selecting a substantive implementation lane. For `ship`, read [automatic promotion](references/automatic-promotion.md) before dispatching the continuation. In the release stage, read [release promotion](references/release-promotion.md) completely before any merge or external mutation.
+Read [receipt schema](references/receipt-schema.md) before declaring a terminal result. In the PR stage, read [owner-directed execution](references/delegated-implementation.md) completely before choosing an execution shape. For `ship`, read [automatic promotion](references/automatic-promotion.md) before dispatching the continuation. In the release stage, read [release promotion](references/release-promotion.md) completely before any merge or external mutation.
 
 ## Resolve preferences
 
-Before selecting an execution lane for a real run, read [configuration](references/configuration.md) and resolve the effective settings with its deterministic script. Defaults are `gpt-5.6-terra` with `ultra` thinking for substantive implementation, `gpt-5.6-sol` with `xhigh` thinking for a generated release task, and `auto` for bounded collaboration helpers. Current-invocation flags override the optional user config, which overrides these defaults.
+Before selecting an execution shape for a real run, read [configuration](references/configuration.md) and resolve the effective settings with its deterministic script. The reference defaults keep `gpt-5.6-sol` with `xhigh` thinking as the accountable implementation and release owner, set `implementation.substantive_executor=auto`, and prefer `gpt-5.6-luna` with `max` thinking only when an owner independently chooses leaf workers. Current-invocation flags override the optional user config, which overrides these defaults.
 
-Model and thinking settings are preferences, not evidence or authority. Runtime availability may require a disclosed fallback. Task isolation, the PR/release authority boundary, exact-candidate verification, and production proof are invariants and are not configurable.
+Model and thinking settings are preferences, not evidence or authority. Runtime availability may require a disclosed fallback. Fresh-task identity and isolation when used, the PR/release authority boundary, exact-candidate verification, and production proof are invariants and are not configurable.
 
-State the resolved implementation lane, model/thinking, collaboration policy, and requested release continuation in one concise commentary update before dispatch. Never describe a collaboration subagent as an independent Codex task or silently substitute one execution kind for another.
+State the resolved owner model/thinking, executor preference, leaf-worker preference, and requested release continuation in one concise commentary update before dispatching another context. Never describe a collaboration subagent as an independent Codex task or silently substitute one execution kind for another.
 
 ## Select the stage
 
@@ -34,17 +36,17 @@ State the resolved implementation lane, model/thinking, collaboration policy, an
 
 ## Minimize contexts
 
-1. Handle tiny, localized work directly in the active controller when a handoff would cost more than the change.
-2. For substantive implementation, default to one user-visible independent task in an isolated worktree using the resolved implementation model and thinking settings, then return once to the same controller.
-3. The active owner may use the minimum useful collaboration subagents for concrete, bounded, independently verifiable work that benefits from parallel execution. They are helpers, not separate planning, status, reviewer, or repair stages, and must not have overlapping write ownership.
-4. Share truth through the approved artifact, Git SHAs, diff, test artifacts, and the handoff contract—not copied conversation history or hidden reasoning.
-5. Use at most one implementer-to-controller handoff. Never bounce review findings between tasks.
+1. Keep the active Sol owner accountable for the complete goal. Let it work directly whenever it can reliably finish in the current session; `tiny` and `substantive` are advisory scope metadata, not routing triggers.
+2. If the owner judges the goal too large for one useful context, it may create a fresh owner stage and pass compact repository evidence. Native compaction stays in the same session and stage; a new session is a new stage.
+3. Do not prescribe collaboration. If any owner independently chooses leaf workers, mark them as terminal leaves: they must not spawn, fork, create another task, or delegate. A fresh stage owner may itself be a child task and may still choose its own leaves.
+4. Give parallel writers non-overlapping ownership or isolated worktrees. Fan results back to the owner, then review the integrated candidate once rather than reviewing each worker, commit, or partial change. The owner may choose a fresh review stage when a clean context materially helps.
+5. Share truth through the approved artifact, Git SHAs, diff, test artifacts, and compact handoffs—not copied conversation history or hidden reasoning.
 
 ## PR stage
 
-1. Refresh only the repository truth needed to choose the direct or one-implementer route. Avoid deeply reading the implementation surface twice.
-2. Batch deterministic inventory, status, and verification work. For substantive implementation, follow [delegated implementation](references/delegated-implementation.md).
-3. After the single handoff, let the controller inspect the complete diff once, patch all findings directly, run exact-candidate gates, clean task-owned runtime resources, commit, push, and create the final PR/MR. Keep the delivery worktree and branch while the PR is open.
+1. Refresh only the repository truth needed to own the goal and choose an execution shape. Avoid deeply reading the implementation surface twice.
+2. Batch deterministic inventory, status, and verification work. Follow [owner-directed execution](references/delegated-implementation.md) whether the owner works directly or chooses optional fresh stages or leaf workers.
+3. After implementation is integrated, let the accountable owner perform one consolidated review, patch findings without review ping-pong, run exact-candidate gates, clean task-owned runtime resources, commit, push, and create the final PR/MR. Keep the delivery worktree and branch while the PR is open.
 4. Once the open PR reaches `pr_ready`, stop PR writes. Do not merge, deploy, migrate, rotate secrets, or mutate production in this session.
 5. For `ship`, dispatch one fresh release task or reuse the exact existing task for the exact PR head by following [automatic promotion](references/automatic-promotion.md). Do not wait in a second controller loop.
 6. Only after the continuation outcome is known, validate the final `pr_ready` receipt with either the created/reused task evidence or the exact unavailable-task fallback. Then end the PR controller.
@@ -53,7 +55,7 @@ State the resolved implementation lane, model/thinking, collaboration policy, an
 
 1. Start from the live existing PR, not a remembered branch. Bind its exact base SHA, head SHA, current checks, reviews, mergeability, and release scope.
 2. Reuse unchanged deterministic evidence by hash. Re-run only repository-required candidate and release gates; do not repeat implementation or create another implementer.
-3. Keep one controller as release owner. A release task generated by `ship` uses the resolved release model and thinking preference. Use repository harnesses for dry-runs and evidence; do not delegate release authority to a subagent or add a preparation/status stage.
+3. Keep one controller as release owner. A release task generated by `ship` uses the resolved release model and thinking preference. Conditional leaf workers remain terminal leaves and never receive merge, deploy, migration, rollback, or production authority. Use repository harnesses for dry-runs and evidence.
 4. Merge through the normal protected path, then use the repository release owner for approved migrations, backfills, deploys, recovery, rollback decisions, and real post-release verification.
 5. Publish the canonical release note for the exact released candidate and prepare the compact release message that will end the final visible response. A draft, generated changelog with no concrete outcome, or deployment-only message is not release completion.
 6. After merge or release, automatically clean the task-owned local worktree and delivery branch. First persist the receipt outside that worktree and prove the PR merged, the worktree is clean and unlocked, every task commit is pushed and reachable from the remote base, and no other task owns it. Run removal from the primary checkout, never from inside the target worktree; use `git worktree remove`, prune stale metadata, safe-delete the local branch, and delete the remote branch when repository policy permits. Never force removal. If any check or cleanup step fails, retain the evidence and report `blocked`, not success.
@@ -78,10 +80,10 @@ Keep the validated file until the local history hook copies it. Append this hidd
 Immediately before the receipt marker, append one single-line routing marker so private history can audit declared execution separately from delivery evidence:
 
 ```text
-<!-- auto-pilot-routing: {"implementation":{"lane":"independent_task","task_ref":"<THREAD OR CLIENT THREAD ID>","worktree":true,"model":"gpt-5.6-terra","thinking":"ultra","reason":null},"continuation":{"lane":"not_requested","task_ref":null,"worktree":null,"model":null,"thinking":null,"reason":null}} -->
+<!-- auto-pilot-routing: {"implementation":{"lane":"direct","task_ref":null,"worktree":null,"model":"gpt-5.6-sol","thinking":"xhigh","reason":"Owner completed the PR stage in the current session."},"continuation":{"lane":"not_requested","task_ref":null,"worktree":null,"model":null,"thinking":null,"reason":null}} -->
 ```
 
-Use `direct`, `collaboration_subagent`, or `not_applicable` for other implementation lanes. Use `fresh_release_task`, `reused_release_task`, `fallback_command`, `not_requested`, or `current_release_task` for continuation. Include a short `reason` for a direct implementation, configured primary subagent, reused task, runtime fallback, or unavailable task mechanism. When a user-visible task was created, also emit `::created-thread{threadId="<REF>"}` (or `clientThreadId`) and use the same task reference in the routing marker; every such directive must map to one declared lane. A missing or inconsistent routing marker makes orchestration conformance `unknown` or `deviation`; it does not change a valid delivery receipt.
+Use `independent_task` when the owner chose a fresh primary implementation stage, `collaboration_subagent` only for a legacy or explicitly configured primary-subagent route, and `not_applicable` in release mode. Optional leaf workers do not replace the accountable implementation lane. Use `fresh_release_task`, `reused_release_task`, `fallback_command`, `not_requested`, or `current_release_task` for continuation. Include a short `reason` for direct work, an explicitly configured primary subagent, a reused task, a runtime fallback, or an unavailable task mechanism. When a user-visible task was created, also emit `::created-thread{threadId="<REF>"}` (or `clientThreadId`) and use the primary stage reference in the routing marker. Additional owner stages and leaf ancestry are best-effort routing evidence when the runtime does not expose their complete relationship; record them as unverified rather than inventing certainty. A missing or inconsistent routing marker does not change a valid delivery receipt.
 
 For `released`, the final visible content must end with the exact Markdown stored in `release.message`; append the routing and receipt markers after it. Report exactly one terminal state: `pr_ready`, `merged_main`, `released`, or `blocked`. Do not commit agent-control artifacts unless the repository explicitly requires them.
 

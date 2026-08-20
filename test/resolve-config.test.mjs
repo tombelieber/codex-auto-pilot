@@ -38,31 +38,31 @@ test('invocation settings override user config, which overrides defaults', () =>
       schema_version: 1,
       implementation: {substantive_executor: 'auto', model: 'user-implementation', thinking: 'high'},
       release: {model: 'user-release', thinking: 'medium'},
-      collaboration: {policy: 'off'},
+      collaboration: {policy: 'off', model: 'user-leaf', thinking: 'high'},
     }))
     const resolved = resolveAutoPilotConfig({
       configPath: f.config,
-      prompt: '$auto-pilot pr docs/plan.md --implementation-model="invocation-implementation" --release-thinking xhigh --collaboration auto',
+      prompt: '$auto-pilot pr docs/plan.md --implementation-model="invocation-implementation" --release-thinking xhigh --collaboration auto --collaboration-thinking max',
     })
     assert.deepEqual(resolved.implementation, {
       substantive_executor: 'auto', model: 'invocation-implementation', thinking: 'high',
     })
     assert.deepEqual(resolved.release, {model: 'user-release', thinking: 'xhigh'})
-    assert.deepEqual(resolved.collaboration, {policy: 'auto'})
+    assert.deepEqual(resolved.collaboration, {policy: 'auto', model: 'user-leaf', thinking: 'max'})
     assert.equal(resolved.source.config_loaded, true)
     assert.deepEqual(resolved.source.invocation_overrides, [
-      'implementation.model', 'release.thinking', 'collaboration.policy',
+      'implementation.model', 'release.thinking', 'collaboration.policy', 'collaboration.thinking',
     ])
   } finally { f.cleanup() }
 })
 
 test('routing flags are deterministic and reject empty or duplicate values', () => {
   assert.deepEqual(parseInvocationOverrides(
-    '$auto-pilot pr --implementation-executor direct --implementation-model="local-model" --implementation-thinking high --release-model remote-model --release-thinking xhigh --collaboration off',
+    '$auto-pilot pr --implementation-executor direct --implementation-model="local-model" --implementation-thinking high --release-model remote-model --release-thinking xhigh --collaboration off --collaboration-model luna-local --collaboration-thinking max',
   ), {
     implementation: {substantive_executor: 'direct', model: 'local-model', thinking: 'high'},
     release: {model: 'remote-model', thinking: 'xhigh'},
-    collaboration: {policy: 'off'},
+    collaboration: {policy: 'off', model: 'luna-local', thinking: 'max'},
   })
   assert.throws(() => parseInvocationOverrides('$auto-pilot pr --implementation-model='), /requires a value/)
   assert.throws(() => parseInvocationOverrides('$auto-pilot pr --implementation-model --release-model gpt-5.6-sol'), /implementation-model requires a value/)

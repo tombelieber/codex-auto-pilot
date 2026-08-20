@@ -33,13 +33,15 @@ test('plugin hooks collect lifecycle evidence without adding model context', asy
   }
 })
 
-test('skill enforces configurable routing with one accountable implementation lane and a fresh release boundary', async () => {
+test('skill keeps owner-directed routing, terminal leaves, and a fresh release boundary', async () => {
   const skill = await read('skills/auto-pilot/SKILL.md')
   const receipt = await read('skills/auto-pilot/references/receipt-schema.md')
-  assert.match(skill, /default to one user-visible independent task in an isolated worktree/)
+  assert.match(skill, /implementation\.substantive_executor=auto/)
+  assert.match(skill, /must not spawn, fork, create another task, or delegate/)
+  assert.match(skill, /A fresh stage owner may itself be a child task/)
   assert.match(skill, /Current-invocation flags override the optional user config, which overrides these defaults/)
   assert.match(skill, /Never describe a collaboration subagent as an independent Codex task/)
-  assert.match(skill, /at most one implementer-to-controller handoff/)
+  assert.match(skill, /review the integrated candidate once rather than reviewing each worker, commit, or partial change/)
   assert.match(skill, /generated task begins with an explicit `\$auto-pilot release <PR>` command/)
   assert.match(skill, /fresh user-visible release task, never a subagent or fork/)
   assert.match(skill, /Only after the continuation outcome is known, validate the final `pr_ready` receipt/)
