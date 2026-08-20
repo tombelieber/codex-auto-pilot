@@ -1,10 +1,10 @@
 # Completion Receipt
 
-Create a temporary JSON document with this version 4 shape. It records delivery and authority evidence, not model or orchestration choices.
+Create a temporary JSON document with this version 5 shape. It records delivery and authority evidence, not model or orchestration choices.
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "mode": "pr",
   "terminal_state": "pr_ready",
   "plan": { "source": "docs/approved-plan.md", "approved": true },
@@ -39,7 +39,7 @@ Successful receipts require an approved plan, non-empty summary, at least one co
 
 - `pr_ready`: mode `pr`; PR is open or ready, unmerged, release is `not_requested`, and `promotion` is absent.
 - `merged_main`: mode `release`; PR is merged with a merge SHA, no deployment mechanism exists, and release is `no_mechanism`.
-- `released`: mode `release`; PR is merged, release is `passed`, a release URL exists, and post-release evidence is included in `checks` and `release.evidence`.
+- `released`: mode `release`; PR is merged, release is `passed`, a release URL exists, and exact capability reachability is proven for the deployed merge commit.
 - `blocked`: at least one blocker with `reason` and `evidence`; delivery sections may be omitted.
 
 A successful release-mode receipt must add this object:
@@ -56,6 +56,63 @@ A successful release-mode receipt must add this object:
 
 `source` is `live_pr` or `pr_ready_receipt`. For `pr_ready_receipt`, set `source_receipt` to the receipt path or immutable receipt identity; otherwise it must be null. `candidate_head_sha` must be the full live pre-merge PR head and must appear in `git.commits`. A receipt is evidence only: `authority_evidence` must identify the fresh current promotion invocation.
 
+A `released` receipt must also add at least one impact-selected reachability
+case. Do not add this object to `pr_ready` or `merged_main` receipts:
+
+```json
+"capability_reachability": {
+  "deployed_candidate_sha": "cccccccccccccccccccccccccccccccccccccccc",
+  "scope_evidence": "The repository release plan selected the changed comment reply capability only.",
+  "cases": [
+    {
+      "id": "comment-reply",
+      "actor": "authenticated external caller",
+      "credential_class": "personal access token",
+      "resource_scope": "runtime-supplied canary workspace and connected account",
+      "entrypoint": "public reply apply endpoint",
+      "runtime_principal": "production edge runtime database role",
+      "representative_data_case": "legacy missing author identity plus a valid reply target",
+      "expected_terminal_outcome": "provider reply identifier observed",
+      "deterministic": {
+        "status": "passed",
+        "evidence": "Exact local API-to-worker-to-fake-provider E2E artifact"
+      },
+      "production": {
+        "status": "passed",
+        "evidence": "One bounded canary through the deployed public API reached the terminal provider outcome"
+      },
+      "authorization_changed": true,
+      "authorized": {
+        "status": "passed",
+        "decision": "allowed",
+        "effective_binding_count": 1,
+        "evidence": "Authorized runtime credential reached the scoped capability"
+      },
+      "unauthorized": {
+        "status": "passed",
+        "decision": "denied",
+        "effective_binding_count": 0,
+        "evidence": "Out-of-scope credential was denied at the same boundary"
+      }
+    }
+  ]
+}
+```
+
+Each case binds the observable capability to its real actor, credential,
+resource scope, entry point, runtime principal, representative data, and
+terminal result. Both deterministic and production proof must pass. When
+`authorization_changed` is true, authorized and unauthorized proofs are also
+mandatory. The authorized case needs at least one effective scope binding; the
+denied case needs zero effective bindings for that exact scope. The deployed
+SHA must be the full merged commit recorded by the PR.
+
+Repository impact selection decides which cases are affected. Production
+canaries run only during an explicitly authorized release candidate, never on
+every edit or commit. Use runtime-supplied dedicated canary resources through
+the normal production integration; do not hard-code account IDs or require a
+duplicate provider app merely for test isolation.
+
 Record migrations, backfills, E2E, rollout, rollback, and post-release verification as normal `checks` when applicable. Extra evidence fields are allowed. Do not add model names, agent counts, reviewer identities, effort routing, or parallelism requirements.
 
 ## Hand the receipt to local history
@@ -66,4 +123,4 @@ After `validate_receipt.py` succeeds, keep the temporary file in place through t
 <!-- auto-pilot-receipt: /absolute/path/to/receipt.json -->
 ```
 
-The passive local hook verifies the receipt mode and terminal state, copies it into the private run archive, and hashes the source path without storing that path. Missing or invalid receipt evidence remains `unknown`; final-message keywords never create a successful history record.
+The passive local hook runs the same full validator, verifies the invocation mode, copies the receipt into the private run archive, and hashes the source path without storing that path. Missing or invalid receipt evidence remains `unknown`; final-message keywords never create a successful history record.

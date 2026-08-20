@@ -8,9 +8,12 @@ const read = (path) => readFile(join(root, path), 'utf8')
 
 test('Auto Pilot is explicit-only and exposes a valid skill path', async () => {
   const manifest = JSON.parse(await read('.codex-plugin/plugin.json'))
+  const packageMetadata = JSON.parse(await read('package.json'))
   const agent = await read('skills/auto-pilot/agents/openai.yaml')
+  const history = await read('skills/auto-pilot/scripts/history.mjs')
   assert.equal(manifest.name, 'codex-auto-pilot')
-  assert.equal(manifest.version, '0.6.0')
+  assert.equal(manifest.version, packageMetadata.version)
+  assert.equal(history.includes(`AUTO_PILOT_VERSION = '${packageMetadata.version}'`), true)
   assert.equal(manifest.skills, './skills/')
   assert.equal(manifest.hooks, './hooks/hooks.json')
   assert.match(agent, /allow_implicit_invocation:\s*false/)

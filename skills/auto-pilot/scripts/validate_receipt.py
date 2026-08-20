@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a minimal Auto Pilot version 4 completion receipt."""
+"""Validate an Auto Pilot version 5 completion receipt."""
 
 import json
 import re
@@ -128,6 +128,73 @@ def validate_promotion(value, git_value=None):
     return value
 
 
+def validate_proof(value, name, require_success):
+    value = obj(value, name)
+    allowed = {"passed"} if require_success else {"passed", "failed", "not_run"}
+    if value.get("status") not in allowed:
+        die(f"{name}.status is unsupported")
+    text(value.get("evidence"), f"{name}.evidence")
+    return value
+
+
+def validate_authorization_proof(value, name, decision, require_success):
+    value = validate_proof(value, name, require_success)
+    if value.get("decision") != decision:
+        die(f"{name}.decision must be {decision}")
+    binding_count = value.get("effective_binding_count")
+    if not isinstance(binding_count, int) or isinstance(binding_count, bool):
+        die(f"{name}.effective_binding_count must be an integer")
+    if decision == "allowed" and binding_count < 1:
+        die(f"{name}.effective_binding_count must be positive for an allowed decision")
+    if decision == "denied" and binding_count != 0:
+        die(f"{name}.effective_binding_count must be zero for a denied decision")
+    return value
+
+
+def validate_capability_reachability(value, require_success):
+    value = obj(value, "capability_reachability")
+    deployed_sha = full_git_sha(
+        value.get("deployed_candidate_sha"),
+        "capability_reachability.deployed_candidate_sha",
+    )
+    text(value.get("scope_evidence"), "capability_reachability.scope_evidence")
+    cases = value.get("cases")
+    if not isinstance(cases, list) or not cases:
+        die("capability_reachability.cases must contain at least one case")
+    seen = set()
+    for index, case in enumerate(cases):
+        name = f"capability_reachability.cases[{index}]"
+        case = obj(case, name)
+        case_id = text(case.get("id"), f"{name}.id")
+        if case_id in seen:
+            die(f"{name}.id must be unique")
+        seen.add(case_id)
+        for key in (
+            "actor",
+            "credential_class",
+            "resource_scope",
+            "entrypoint",
+            "runtime_principal",
+            "representative_data_case",
+            "expected_terminal_outcome",
+        ):
+            text(case.get(key), f"{name}.{key}")
+        validate_proof(case.get("deterministic"), f"{name}.deterministic", require_success)
+        validate_proof(case.get("production"), f"{name}.production", require_success)
+        if not isinstance(case.get("authorization_changed"), bool):
+            die(f"{name}.authorization_changed must be a boolean")
+        if case.get("authorization_changed"):
+            validate_authorization_proof(
+                case.get("authorized"), f"{name}.authorized", "allowed", require_success
+            )
+            validate_authorization_proof(
+                case.get("unauthorized"), f"{name}.unauthorized", "denied", require_success
+            )
+        elif "authorized" in case or "unauthorized" in case:
+            die(f"{name} authorization proofs require authorization_changed true")
+    return deployed_sha
+
+
 def validate_optional_blocked(root):
     git_value = None
     if "git" in root:
@@ -142,6 +209,8 @@ def validate_optional_blocked(root):
         validate_release(root["release"], True)
     if "promotion" in root:
         validate_promotion(root["promotion"], git_value)
+    if "capability_reachability" in root:
+        validate_capability_reachability(root["capability_reachability"], False)
 
 
 def validate(path):
@@ -152,8 +221,8 @@ def validate(path):
     except json.JSONDecodeError as exc:
         die(f"invalid JSON at line {exc.lineno}, column {exc.colno}")
 
-    if root.get("schema_version") != 4:
-        die("schema_version must be 4")
+    if root.get("schema_version") != 5:
+        die("schema_version must be 5")
     mode = root.get("mode")
     terminal = root.get("terminal_state")
     if mode not in {"pr", "release"}:
@@ -199,6 +268,8 @@ def validate(path):
             die("pr_ready requires release.status not_requested and a null URL")
         if "promotion" in root:
             die("pr_ready must not contain promotion evidence")
+        if "capability_reachability" in root:
+            die("pr_ready must not contain production capability reachability evidence")
         return terminal
 
     if mode != "release":
@@ -206,16 +277,23 @@ def validate(path):
     validate_promotion(root.get("promotion"), git_value)
     if pull_request.get("merged") is not True or pull_request.get("status") != "merged":
         die("release mode requires a merged PR/MR")
-    git_sha(pull_request.get("merge_sha"), "pull_request.merge_sha")
+    merge_sha = full_git_sha(pull_request.get("merge_sha"), "pull_request.merge_sha")
 
     if terminal == "merged_main":
         if release.get("status") != "no_mechanism" or release.get("url") is not None:
             die("merged_main requires release.status no_mechanism and a null URL")
+        if "capability_reachability" in root:
+            die("merged_main must not contain production capability reachability evidence")
         return terminal
 
     if release.get("status") != "passed":
         die("released requires release.status passed")
     web_url(release.get("url"), "release.url")
+    deployed_sha = validate_capability_reachability(
+        root.get("capability_reachability"), True
+    )
+    if deployed_sha != merge_sha:
+        die("capability_reachability.deployed_candidate_sha must equal pull_request.merge_sha")
     return terminal
 
 

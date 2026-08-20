@@ -23,7 +23,7 @@ import {createInterface} from 'node:readline'
 import {archiveInstalledSkillVersion, installedSkillBundle} from './history-bundle.mjs'
 import {collectCompletionReceipt} from './history-receipt.mjs'
 
-export const AUTO_PILOT_VERSION = '0.6.0'
+export const AUTO_PILOT_VERSION = '0.7.0'
 export const HISTORY_SCHEMA_VERSION = 2
 export const DEFAULT_RAW_RETENTION_DAYS = 90
 

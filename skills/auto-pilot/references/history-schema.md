@@ -28,7 +28,7 @@ The first run of each complete bundle is also archived under `~/.codex-auto-pilo
 - Parse errors, which must remain visible instead of silently dropping unsupported records.
 - Collection-complete and token-counter-reset flags so missing or incompatible usage evidence is never presented as a real zero-token run.
 
-`outcome.json` accepts a terminal state only from a validated v4 receipt referenced by the hidden final-response marker. The hook copies that receipt to `receipt.json` and records its SHA-256 plus a hash of the source path. It never infers success from prose. Missing, invalid, oversized, or mode-mismatched evidence produces `unknown` and is excluded from the benchmark cohort.
+`outcome.json` accepts a terminal state only from a fully validated v5 receipt referenced by the hidden final-response marker. The hook invokes the same validator used by the controller, copies that receipt to `receipt.json`, and records its SHA-256 plus a hash of the source path. It never infers success from prose or from a shallow mode/state object. Missing, invalid, oversized, or mode-mismatched evidence produces `unknown` and is excluded from the benchmark cohort.
 
 Reports retain legacy totals for continuity, count requested continuations, and calculate a separate benchmark cohort from receipt-verified runs only. Compare model or skill versions using that cohort and task-local quality evidence, never raw mixed historical totals.
 

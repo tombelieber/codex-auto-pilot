@@ -50,7 +50,9 @@ Read [receipt schema](references/receipt-schema.md) before declaring a terminal 
 
 ## Prove completion
 
-Use repository-defined deterministic evidence first. Do not invent checks, reviews, deployments, migrations, or observations. Create a temporary v4 completion receipt and validate it:
+Use repository-defined deterministic evidence first. Do not invent checks, reviews, deployments, migrations, or observations. A production deployment is not a released capability until the exact affected actor, credential, scope, entry point, runtime principal, representative data case, and terminal outcome are proven against the deployed candidate. Production canaries are impact-selected release evidence, never per-edit or per-commit checks.
+
+Create a temporary v5 completion receipt and validate it:
 
 ```bash
 python3 <skill-dir>/scripts/validate_receipt.py <receipt.json>
