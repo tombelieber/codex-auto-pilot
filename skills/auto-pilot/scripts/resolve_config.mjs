@@ -9,9 +9,9 @@ export const CONFIG_SCHEMA_VERSION = 1
 
 export const DEFAULT_AUTO_PILOT_SETTINGS = Object.freeze({
   implementation: Object.freeze({
-    substantive_executor: 'task',
-    model: 'gpt-5.6-terra',
-    thinking: 'ultra',
+    substantive_executor: 'auto',
+    model: 'gpt-5.6-sol',
+    thinking: 'xhigh',
   }),
   release: Object.freeze({
     model: 'gpt-5.6-sol',
@@ -19,6 +19,8 @@ export const DEFAULT_AUTO_PILOT_SETTINGS = Object.freeze({
   }),
   collaboration: Object.freeze({
     policy: 'auto',
+    model: 'gpt-5.6-luna',
+    thinking: 'max',
   }),
 })
 
@@ -35,6 +37,8 @@ const OVERRIDE_FLAGS = [
   ['release-model', 'release', 'model'],
   ['release-thinking', 'release', 'thinking'],
   ['collaboration', 'collaboration', 'policy'],
+  ['collaboration-model', 'collaboration', 'model'],
+  ['collaboration-thinking', 'collaboration', 'thinking'],
 ]
 
 export function defaultConfigPath(env = process.env) {
@@ -112,6 +116,8 @@ export function parseInvocationOverrides(prompt) {
     }),
     collaboration: compactObject({
       policy: values.collaboration,
+      model: values['collaboration-model'],
+      thinking: values['collaboration-thinking'],
     }),
   })
 }
@@ -159,10 +165,12 @@ function validateConfigDocument(value) {
 
   if (value.collaboration !== undefined) {
     assertObject(value.collaboration, 'collaboration')
-    assertKnownKeys(value.collaboration, ['policy'], 'collaboration')
+    assertKnownKeys(value.collaboration, ['policy', 'model', 'thinking'], 'collaboration')
     if (value.collaboration.policy !== undefined && !COLLABORATION_POLICIES.has(value.collaboration.policy)) {
       throw new Error('collaboration.policy must be auto or off')
     }
+    validateModel(value.collaboration.model, 'collaboration.model')
+    validateThinking(value.collaboration.thinking, 'collaboration.thinking')
   }
 }
 

@@ -4,7 +4,7 @@ import test from 'node:test'
 import {auditRouting, parseRoutingMarker} from '../skills/auto-pilot/scripts/history-routing.mjs'
 
 const implementationDefaults = {
-  substantive_executor: 'task', model: 'gpt-5.6-terra', thinking: 'ultra',
+  substantive_executor: 'auto', model: 'gpt-5.6-sol', thinking: 'xhigh',
 }
 const releaseDefaults = {model: 'gpt-5.6-sol', thinking: 'xhigh'}
 
@@ -27,7 +27,7 @@ function marker(implementation, continuation) {
 function independentTask(taskRef = 'implementation-task') {
   return {
     lane: 'independent_task', task_ref: taskRef, worktree: true,
-    model: 'gpt-5.6-terra', thinking: 'ultra', reason: null,
+    model: 'gpt-5.6-sol', thinking: 'xhigh', reason: null,
   }
 }
 
@@ -35,20 +35,31 @@ function notRequested() {
   return {lane: 'not_requested', task_ref: null, worktree: null, model: null, thinking: null, reason: null}
 }
 
-test('routing audit passes an independent task only with matching task evidence', () => {
+test('routing audit passes matching owner-stage evidence and marks unobservable depth honestly', () => {
   const taskRef = 'implementation-task'
   const message = `::created-thread{threadId="${taskRef}"}\n${marker(independentTask(taskRef), notRequested())}`
   const result = auditRouting({message, manifest: manifest(), subagents: 1})
   assert.equal(result.status, 'passed')
   assert.deepEqual(result.created_thread_refs, [taskRef])
   assert.deepEqual(result.deviations, [])
+  assert.match(result.unverified.join('\n'), /parent-child delegation depth/)
 
-  const unaccountedTask = auditRouting({
+  const additionalStage = auditRouting({
     message: `::created-thread{threadId="${taskRef}"}\n::created-thread{threadId="unexpected-task"}\n${marker(independentTask(taskRef), notRequested())}`,
     manifest: manifest(),
   })
-  assert.equal(unaccountedTask.status, 'deviation')
-  assert.match(unaccountedTask.deviations.join('\n'), /not accounted for/)
+  assert.equal(additionalStage.status, 'passed')
+  assert.match(additionalStage.unverified.join('\n'), /additional owner-stage relationships/)
+
+  const undeclaredTask = auditRouting({
+    message: `::created-thread{threadId="unexpected-task"}\n${marker({
+      lane: 'direct', task_ref: null, worktree: null, model: 'gpt-5.6-sol', thinking: 'xhigh',
+      reason: 'Owner completed directly.',
+    }, notRequested())}`,
+    manifest: manifest(),
+  })
+  assert.equal(undeclaredTask.status, 'deviation')
+  assert.match(undeclaredTask.deviations.join('\n'), /not accounted for/)
 })
 
 test('routing audit keeps a disclosed direct task-interface fallback separate from a deviation', () => {
@@ -61,13 +72,15 @@ test('routing audit keeps a disclosed direct task-interface fallback separate fr
   assert.deepEqual(result.deviations, [])
 })
 
-test('routing audit rejects undisclosed primary subagent substitution and helper use when off', () => {
+test('routing audit honors owner-decided primary stages and rejects explicit conflicts', () => {
   const primarySubagent = {
     lane: 'collaboration_subagent', task_ref: null, worktree: true,
-    model: 'gpt-5.6-terra', thinking: 'ultra', reason: 'Configured primary subagent.',
+    model: 'gpt-5.6-sol', thinking: 'xhigh', reason: 'Configured primary subagent.',
   }
   const unauthorized = auditRouting({
-    message: marker(primarySubagent, notRequested()), manifest: manifest(), subagents: 1,
+    message: marker(primarySubagent, notRequested()),
+    manifest: manifest({implementation: {...implementationDefaults, substantive_executor: 'task'}}),
+    subagents: 1,
   })
   assert.equal(unauthorized.status, 'deviation')
   assert.match(unauthorized.deviations.join('\n'), /not explicitly configured/)
@@ -126,8 +139,8 @@ test('release routing audits fresh, fallback, and current release task lanes', (
     message: `::created-thread{threadId="implementation-task"}\n::created-thread{threadId="release-task"}\n::created-thread{threadId="second-release-task"}\n${marker(independentTask(), releaseTask)}`,
     manifest: manifest({continuation: 'release'}),
   })
-  assert.equal(extraReleaseTask.status, 'deviation')
-  assert.match(extraReleaseTask.deviations.join('\n'), /second-release-task/)
+  assert.equal(extraReleaseTask.status, 'passed')
+  assert.match(extraReleaseTask.unverified.join('\n'), /second-release-task/)
 
   const fallback = auditRouting({
     message: `::created-thread{threadId="implementation-task"}\n${marker(independentTask(), {
