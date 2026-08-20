@@ -1,7 +1,7 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.7.0",
-  "description": "Deliver approved plans through a minimal-context PR stage and optionally auto-start a fresh release task.",
+  "version": "0.8.0",
+  "description": "Deliver approved plans through a configurable PR stage and optionally auto-start a fresh release task.",
   "author": { "name": "tombelieber", "url": "https://github.com/tombelieber" },
   "homepage": "https://github.com/tombelieber/codex-auto-pilot",
   "repository": "https://github.com/tombelieber/codex-auto-pilot",
@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Codex Auto Pilot",
     "shortDescription": "Build a verified PR and optionally auto-start its fresh release task",
-    "longDescription": "Uses one canonical Sol PR controller, at most one fresh Terra implementation session, one compact handoff, and an optional one-command ship lane that starts a separate Sol release task after PR readiness.",
+    "longDescription": "Uses one controller, one declared accountable implementation lane, optional bounded helpers, one compact handoff, and an optional ship lane that starts a separate fresh release task after PR readiness. Model and thinking preferences are configurable; task isolation and release safety are fixed.",
     "developerName": "tombelieber",
     "category": "Productivity",
     "capabilities": ["Write", "Git", "Release"],
