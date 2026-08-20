@@ -8,7 +8,7 @@ $auto-pilot ship docs/approved-plan.md
 $auto-pilot release https://github.com/owner/repo/pull/123
 ```
 
-Auto Pilot v0.8.0 minimizes contexts without weakening the final review or production boundary. Tiny work stays with the controller. By default, substantive PR work uses one fresh, user-visible independent Codex task in an isolated worktree, then returns one compact handoff to the controller. The built-in preference is `gpt-5.6-terra` with `ultra` thinking for that task; a generated release task prefers `gpt-5.6-sol` with `xhigh`. Those are configurable preferences, not delivery evidence or authority.
+Auto Pilot v0.9.0 minimizes contexts without weakening the final review or production boundary. Tiny work stays with the controller. By default, substantive PR work uses one fresh, user-visible independent Codex task in an isolated worktree, then returns one compact handoff to the controller. The built-in preference is `gpt-5.6-terra` with `ultra` thinking for that task; a generated release task prefers `gpt-5.6-sol` with `xhigh`. Those are configurable preferences, not delivery evidence or authority.
 
 ## What it does
 
@@ -174,9 +174,15 @@ Release mode requires a new explicit invocation that identifies an existing PR:
 $auto-pilot release https://github.com/owner/repo/pull/123
 ```
 
-It starts from the live candidate, merges through the repository's normal protected path, uses the discovered release mechanism, handles approved migrations or backfills, and verifies each affected capability through its exact production actor, credential, scope, runtime principal, representative data, and terminal outcome. Live canaries are release-only and impact-selected; they are never run on every edit or commit. If the repository has no release mechanism, it stops after merging. A PR-stage conversation or receipt is evidence, never release authority.
+It starts from the live candidate, merges through the repository's normal protected path, uses the discovered release mechanism, handles approved migrations or backfills, and verifies each affected capability through its exact production actor, credential, scope, runtime principal, representative data, and terminal outcome. It then publishes canonical release notes and ends every `released` response with a compact release message linked to them. Live canaries are release-only and impact-selected; they are never run on every edit or commit. If the repository has no release mechanism, it stops after merging. A PR-stage conversation or receipt is evidence, never release authority.
 
 Each session reports one terminal state: the PR controller reports `pr_ready` or `blocked`; the fresh release controller reports `merged_main`, `released`, or `blocked`. Its completion receipt records plan, Git, criteria, checks, PR/release evidence, exact release capability reachability, and blockers without copying model reasoning. A successful deployment with missing reachability proof remains `blocked`, not `released`.
+
+Local worktree cleanup is separate from delivery. Auto Pilot keeps the PR or
+release worktree by default after merge/release; GitHub remote-branch deletion
+does not remove it. Delete it only on an explicit cleanup request after fresh
+checks prove the worktree clean, unlocked, merged, and fully reachable from the
+remote base.
 
 ## Local run history
 

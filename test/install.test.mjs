@@ -40,7 +40,7 @@ test('installs only the skill', () => {
   } finally { f.cleanup() }
 })
 
-test('the repository installer includes v0.8 routing files', () => {
+test('the repository installer includes current routing files', () => {
   const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-install-v080-'))
   const home = join(root, 'home')
   try {

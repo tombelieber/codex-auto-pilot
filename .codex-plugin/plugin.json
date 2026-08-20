@@ -1,7 +1,7 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.8.0",
-  "description": "Deliver approved plans through a configurable PR stage and optionally auto-start a fresh release task.",
+  "version": "0.9.0",
+  "description": "Deliver approved plans through verified PR and release stages with canonical release notes.",
   "author": { "name": "tombelieber", "url": "https://github.com/tombelieber" },
   "homepage": "https://github.com/tombelieber/codex-auto-pilot",
   "repository": "https://github.com/tombelieber/codex-auto-pilot",
@@ -11,8 +11,8 @@
   "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Codex Auto Pilot",
-    "shortDescription": "Build a verified PR and optionally auto-start its fresh release task",
-    "longDescription": "Uses one controller, one declared accountable implementation lane, optional bounded helpers, one compact handoff, and an optional ship lane that starts a separate fresh release task after PR readiness. Model and thinking preferences are configurable; task isolation and release safety are fixed.",
+    "shortDescription": "Build a verified PR and close releases with notes",
+    "longDescription": "Uses one controller, one declared accountable implementation lane, optional bounded helpers, one compact handoff, and an optional ship lane that starts a separate fresh release task after PR readiness. Released runs require canonical notes and a final linked release message; local worktree removal remains explicit and safety-checked.",
     "developerName": "tombelieber",
     "category": "Productivity",
     "capabilities": ["Write", "Git", "Release"],

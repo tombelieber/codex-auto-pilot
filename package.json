@@ -1,7 +1,7 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.8.0",
-  "description": "Configurable, minimal-context Codex delivery with one accountable implementation lane and an optional fresh release continuation.",
+  "version": "0.9.0",
+  "description": "Configurable Codex delivery with verified PRs, release notes, and explicit worktree cleanup.",
   "bin": {
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
   },

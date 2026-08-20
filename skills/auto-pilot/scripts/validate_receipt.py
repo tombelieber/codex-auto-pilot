@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate an Auto Pilot version 5 completion receipt."""
+"""Validate an Auto Pilot version 6 completion receipt."""
 
 import json
 import re
@@ -98,8 +98,26 @@ def validate_release(value, allow_failed=False):
         statuses.add("failed")
     if value.get("status") not in statuses:
         die("release.status is unsupported")
-    if value.get("url") is not None:
+    if value.get("status") == "passed":
         web_url(value.get("url"), "release.url")
+    elif value.get("url") is not None:
+        web_url(value.get("url"), "release.url")
+    notes_url = value.get("notes_url")
+    message = value.get("message")
+    if value.get("status") == "passed":
+        notes_url = web_url(notes_url, "release.notes_url")
+        message = text(message, "release.message")
+        if not message.startswith("### Release"):
+            die("release.message must start with the ### Release heading")
+        if notes_url not in message:
+            die("release.message must contain release.notes_url")
+    elif notes_url is not None or message is not None:
+        if notes_url is None or message is None:
+            die("release.notes_url and release.message must both be set or both be null")
+        notes_url = web_url(notes_url, "release.notes_url")
+        message = text(message, "release.message")
+        if notes_url not in message:
+            die("release.message must contain release.notes_url")
     text(value.get("evidence"), "release.evidence")
     return value
 
@@ -221,8 +239,8 @@ def validate(path):
     except json.JSONDecodeError as exc:
         die(f"invalid JSON at line {exc.lineno}, column {exc.colno}")
 
-    if root.get("schema_version") != 5:
-        die("schema_version must be 5")
+    if root.get("schema_version") != 6:
+        die("schema_version must be 6")
     mode = root.get("mode")
     terminal = root.get("terminal_state")
     if mode not in {"pr", "release"}:
@@ -264,8 +282,13 @@ def validate(path):
             die("pr_ready requires an open, unmerged PR/MR")
         if pull_request.get("merge_sha") is not None:
             die("pr_ready requires pull_request.merge_sha to be null")
-        if release.get("status") != "not_requested" or release.get("url") is not None:
-            die("pr_ready requires release.status not_requested and a null URL")
+        if (
+            release.get("status") != "not_requested"
+            or release.get("url") is not None
+            or release.get("notes_url") is not None
+            or release.get("message") is not None
+        ):
+            die("pr_ready requires release status not_requested and null release artifacts")
         if "promotion" in root:
             die("pr_ready must not contain promotion evidence")
         if "capability_reachability" in root:
@@ -280,8 +303,13 @@ def validate(path):
     merge_sha = full_git_sha(pull_request.get("merge_sha"), "pull_request.merge_sha")
 
     if terminal == "merged_main":
-        if release.get("status") != "no_mechanism" or release.get("url") is not None:
-            die("merged_main requires release.status no_mechanism and a null URL")
+        if (
+            release.get("status") != "no_mechanism"
+            or release.get("url") is not None
+            or release.get("notes_url") is not None
+            or release.get("message") is not None
+        ):
+            die("merged_main requires release status no_mechanism and null release artifacts")
         if "capability_reachability" in root:
             die("merged_main must not contain production capability reachability evidence")
         return terminal

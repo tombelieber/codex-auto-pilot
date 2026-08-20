@@ -1,10 +1,10 @@
 # Completion Receipt
 
-Create a temporary JSON document with this version 5 shape. It records delivery and authority evidence, not model or orchestration choices.
+Create a temporary JSON document with this version 6 shape. It records delivery and authority evidence, not model or orchestration choices.
 
 ```json
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "mode": "pr",
   "terminal_state": "pr_ready",
   "plan": { "source": "docs/approved-plan.md", "approved": true },
@@ -29,6 +29,8 @@ Create a temporary JSON document with this version 5 shape. It records delivery 
   "release": {
     "status": "not_requested",
     "url": null,
+    "notes_url": null,
+    "message": null,
     "evidence": "PR stage; production was not changed"
   },
   "blockers": []
@@ -39,7 +41,7 @@ Successful receipts require an approved plan, non-empty summary, at least one co
 
 - `pr_ready`: mode `pr`; PR is open or ready, unmerged, release is `not_requested`, and `promotion` is absent.
 - `merged_main`: mode `release`; PR is merged with a merge SHA, no deployment mechanism exists, and release is `no_mechanism`.
-- `released`: mode `release`; PR is merged, release is `passed`, a release URL exists, and exact capability reachability is proven for the deployed merge commit.
+- `released`: mode `release`; PR is merged, release is `passed`, release and canonical-notes URLs exist, the exact final-response release message links those notes, and exact capability reachability is proven for the deployed merge commit.
 - `blocked`: at least one blocker with `reason` and `evidence`; delivery sections may be omitted.
 
 A successful release-mode receipt must add this object:
@@ -106,6 +108,27 @@ terminal result. Both deterministic and production proof must pass. When
 mandatory. The authorized case needs at least one effective scope binding; the
 denied case needs zero effective bindings for that exact scope. The deployed
 SHA must be the full merged commit recorded by the PR.
+
+For `released`, use this release object:
+
+```json
+"release": {
+  "status": "passed",
+  "url": "https://github.com/owner/repo/releases/tag/v1.2.3",
+  "notes_url": "https://github.com/owner/repo/releases/tag/v1.2.3",
+  "message": "### Release\n\n**v1.2.3** — Released\n\n- User-visible change: The highest-impact outcome.\n- Verification: The exact post-release proof.\n- Distribution: GitHub and package registry complete.\n- Release notes: [v1.2.3](https://github.com/owner/repo/releases/tag/v1.2.3)",
+  "evidence": "Production deployment, distribution, and post-release verification passed"
+}
+```
+
+`notes_url` is the canonical published release note for the exact candidate;
+it may equal `release.url`. `message` is the complete compact Markdown block,
+not only its title. It must contain `notes_url` and must be appended verbatim as
+the final visible content of the agent response. Hidden routing and receipt
+markers follow it. Match repository conventions when they are stronger—for
+example, a required copy-ready Cantonese handoff—but keep the note itself as
+the source of truth. `not_requested` and `no_mechanism` releases use null
+`notes_url` and `message`.
 
 Repository impact selection decides which cases are affected. Production
 canaries run only during an explicitly authorized release candidate, never on
