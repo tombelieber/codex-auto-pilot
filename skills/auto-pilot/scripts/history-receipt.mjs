@@ -12,6 +12,7 @@ import {basename, dirname, isAbsolute, join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 
 const RECEIPT_MARKER = /<!--\s*auto-pilot-receipt:\s*([^\r\n]*?)\s*-->/i
+const ROUTING_MARKER = /<!--\s*auto-pilot-routing:\s*\{[^\r\n]*\}\s*-->/gi
 const MAX_RECEIPT_BYTES = 1024 * 1024
 const RECEIPT_VALIDATOR = fileURLToPath(new URL('./validate_receipt.py', import.meta.url))
 
@@ -44,6 +45,8 @@ export function collectCompletionReceipt(message, expectedMode, directory) {
 
   const error = receiptModeError(receipt, expectedMode)
   if (error) return receiptFailure(error, source)
+  const messageError = releaseMessageError(message, receipt)
+  if (messageError) return receiptFailure(messageError, source)
 
   writePrivateJson(join(directory, 'receipt.json'), receipt)
   return {
@@ -61,6 +64,18 @@ export function collectCompletionReceipt(message, expectedMode, directory) {
 function receiptModeError(receipt, expectedMode) {
   if (expectedMode && receipt.mode !== expectedMode) return 'mode_mismatch'
   return null
+}
+
+function releaseMessageError(message, receipt) {
+  if (receipt.terminal_state !== 'released') return null
+  if (typeof message !== 'string') return 'release_message_mismatch'
+  const expected = receipt.release?.message?.trim()
+  if (!expected) return 'release_message_mismatch'
+  const visible = message
+    .replace(RECEIPT_MARKER, '')
+    .replace(ROUTING_MARKER, '')
+    .trim()
+  return visible.endsWith(expected) ? null : 'release_message_mismatch'
 }
 
 function receiptFailure(status, source = null) {

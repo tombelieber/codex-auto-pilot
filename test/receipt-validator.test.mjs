@@ -10,12 +10,21 @@ const validator = resolve(fileURLToPath(new URL('../skills/auto-pilot/scripts/va
 const headSha = 'a'.repeat(40)
 const baseSha = 'b'.repeat(40)
 const mergeSha = 'c'.repeat(40)
+const notesUrl = 'https://github.com/owner/repo/releases/tag/v1'
+const releaseMessage = `### Release
+
+**v1** — Released
+
+- User-visible change: Replies now reach the intended provider target.
+- Verification: A production canary returned the provider reply identifier.
+- Distribution: GitHub Release complete.
+- Release notes: [v1](${notesUrl})`
 
 function receipt(state = 'pr_ready') {
   const released = state === 'released'
   const merged = state === 'merged_main' || released
   const value = {
-    schema_version: 5,
+    schema_version: 7,
     mode: merged ? 'release' : 'pr',
     terminal_state: state,
     plan: {source: 'docs/plan.md', approved: true},
@@ -25,10 +34,10 @@ function receipt(state = 'pr_ready') {
     checks: [{name: released ? 'post-release E2E' : 'test', status: 'passed', evidence: 'Exact candidate command and bounded artifact reference'}],
     pull_request: {url: 'https://github.com/owner/repo/pull/1', status: merged ? 'merged' : 'open', merged, merge_sha: merged ? mergeSha : null},
     release: released
-      ? {status: 'passed', url: 'https://github.com/owner/repo/releases/tag/v1', evidence: 'Production deployment and post-release E2E passed'}
+      ? {status: 'passed', url: notesUrl, notes_url: notesUrl, message: releaseMessage, evidence: 'Production deployment and post-release E2E passed'}
       : merged
-        ? {status: 'no_mechanism', url: null, evidence: 'Repository has no deployment mechanism'}
-        : {status: 'not_requested', url: null, evidence: 'PR stage; production was not changed'},
+        ? {status: 'no_mechanism', url: null, notes_url: null, message: null, evidence: 'Repository has no deployment mechanism'}
+        : {status: 'not_requested', url: null, notes_url: null, message: null, evidence: 'PR stage; production was not changed'},
     blockers: [],
   }
   if (merged) {
@@ -38,6 +47,13 @@ function receipt(state = 'pr_ready') {
       candidate_base_sha: baseSha,
       candidate_head_sha: headSha,
       authority_evidence: 'Explicit current invocation: $auto-pilot release PR #1',
+    }
+    value.cleanup = {
+      status: 'passed',
+      worktree: 'removed',
+      local_branch: 'deleted',
+      remote_branch: 'deleted',
+      evidence: 'Clean merged task worktree removed; metadata pruned; branches absent',
     }
   }
   if (released) {
@@ -125,6 +141,24 @@ test('rejects release without fresh promotion evidence', () => {
   assert.equal(run(value).status, 1)
 })
 
+test('rejects merged completion without automatic worktree cleanup evidence', () => {
+  const value = receipt('merged_main')
+  delete value.cleanup
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects released completion with a retained worktree', () => {
+  const value = receipt('released')
+  value.cleanup.worktree = 'retained'
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects cleanup evidence in PR mode', () => {
+  const value = receipt()
+  value.cleanup = receipt('released').cleanup
+  assert.equal(run(value).status, 1)
+})
+
 test('rejects promotion evidence in PR mode', () => {
   const value = receipt()
   value.promotion = receipt('released').promotion
@@ -140,6 +174,24 @@ test('rejects release candidate not bound to commits', () => {
 test('rejects released state without release URL', () => {
   const value = receipt('released')
   value.release.url = null
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects released state without canonical release notes', () => {
+  const value = receipt('released')
+  value.release.notes_url = null
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects a final release message that does not link canonical notes', () => {
+  const value = receipt('released')
+  value.release.message = '### Release\n\nReleased without a link.'
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects a release URL passed off as the final release message', () => {
+  const value = receipt('released')
+  value.release.message = notesUrl
   assert.equal(run(value).status, 1)
 })
 

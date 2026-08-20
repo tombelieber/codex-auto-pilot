@@ -25,7 +25,7 @@ import {collectCompletionReceipt} from './history-receipt.mjs'
 import {auditRouting} from './history-routing.mjs'
 import {resolveAutoPilotConfig} from './resolve_config.mjs'
 
-export const AUTO_PILOT_VERSION = '0.8.0'
+export const AUTO_PILOT_VERSION = '0.9.0'
 export const HISTORY_SCHEMA_VERSION = 3
 export const DEFAULT_RAW_RETENTION_DAYS = 90
 

@@ -22,6 +22,23 @@ Use this workflow only in a fresh `$auto-pilot release <PR>` or `$auto-pilot pro
    point, runtime principal, representative data case, and terminal outcome.
    Keep deterministic local E2E as separate evidence; a provider or production
    canary does not replace it.
+7. Publish or update the repository's canonical release note only after the exact
+   released candidate and required distribution channels are known. Prefer the
+   repository's established mechanism. For a GitHub repository with no stronger
+   convention, use one GitHub Release bound to the exact tag/commit; do not create
+   a second announcement-only release. When drafts are supported, prepare one
+   exact-candidate draft before production mutation and publish that same note
+   only after production qualification succeeds.
+8. Write notes for users, not for the deployment log. Lead with the highest-impact
+   outcome and why it matters, then include applicable security/permission
+   changes, the shortest install/update path, current boundaries, exact
+   post-release proof, distribution status, and a full-changelog link. A draft
+   or generic generated changelog is supporting material, not a published note.
+9. Prepare one compact Markdown release message in the user's language. It must
+   name the release, state that it is live, summarize the highest-impact outcome,
+   cite exact post-release verification and distribution state, and link the
+   canonical note. Store the exact block in `release.message` and append it as
+   the final visible section of the response.
 
 Select live canaries from repository impact evidence. Do not call external
 providers on every edit or commit. A provider-specific change gets one bounded
@@ -36,7 +53,34 @@ both the authorized and denied principals at the exact boundary.
 - Before production mutation: fix a small causal defect on the PR branch, bind the new head, and re-run the affected evidence. Block on material new scope or missing authority.
 - During a database migration or incomplete deploy: stop and reconcile exact remote state. Never blindly retry, roll forward, or roll back.
 - After a completed deploy: use only the repository's bounded resume mechanism for eligible smoke or observation failures. If exact capability reachability remains unavailable or fails, return `blocked`; deployment alone cannot become `released`.
+- If the canonical note is missing, still a draft, bound to the wrong candidate, or contains no concrete user outcome, return `blocked`. Do not substitute a prose recap in the agent response for the repository release note.
 - Never call a merge, draft release, successful command, or passing local test “released” without current production evidence.
+
+## Local worktree lifecycle
+
+Merge/release status and local worktree disposal are separate outcomes. Remote
+branch auto-deletion does not remove a local linked worktree, and `git worktree
+prune` only clears administrative records for directories that are already
+missing.
+
+- Keep an open-PR, incomplete-release, or blocked worktree.
+- After the exact PR reaches merged state, automatically clean only the
+  task-owned release/delivery worktree and branch before reporting
+  `merged_main` or `released`.
+- Persist the temporary receipt and all terminal evidence outside the target
+  worktree first. Then re-read the real worktree status, lock state,
+  ignored/untracked state, upstream push state, PR merge state, and remote-base
+  ancestry. Every task commit must be reachable from the remote base.
+- Run removal from the primary checkout or another stable directory, never from
+  inside the target worktree. Use `git worktree remove`, then `git worktree
+  prune`; never use raw recursive filesystem deletion or force removal.
+- Safe-delete the local branch. Delete the remote branch when it exists and
+  repository policy permits; otherwise record `absent`, `not_used`, or
+  `retained_by_policy` explicitly.
+- If ownership is uncertain, the worktree is dirty or locked, a commit is not
+  pushed/reachable, or any cleanup command fails, keep the worktree and return
+  `blocked` with exact evidence. A live release may be reported as already live
+  inside that blocked result, but cleanup is part of Auto Pilot completion.
 
 ## Terminal result
 
@@ -44,5 +88,6 @@ both the authorized and denied principals at the exact boundary.
 - `released`: merge, production mutation, and post-release evidence all succeeded.
 - `blocked`: record the exact candidate, last safe boundary, remote state, and next authorized action.
 
-The release receipt must use schema v5 and include the `promotion` and
-`capability_reachability` objects described in [receipt schema](receipt-schema.md).
+The release receipt must use schema v7 and include the `promotion`, `cleanup`,
+and `capability_reachability` objects plus the canonical `release.notes_url`
+and exact final-response `release.message` described in [receipt schema](receipt-schema.md).
