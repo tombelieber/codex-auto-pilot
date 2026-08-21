@@ -38,6 +38,7 @@ State the resolved owner model/thinking, executor preference, leaf-worker prefer
 
 1. Keep the active Sol owner accountable for the complete goal. Let it work directly whenever it can reliably finish in the current session; `tiny` and `substantive` are advisory scope metadata, not routing triggers.
 2. If the owner judges the goal too large for one useful context, it may create a fresh owner stage and pass compact repository evidence. Native compaction stays in the same session and stage; a new session is a new stage.
+   When the first fresh stage is actually needed, generate one opaque goal ID with `node <skill-dir>/scripts/new_goal_id.mjs`. Reuse it in every fresh Auto Pilot stage prompt as `<!-- auto-pilot-goal: <ID> -->` and in the parent routing marker. Do not generate an ID for direct work merely for telemetry.
 3. Do not prescribe collaboration. If any owner independently chooses leaf workers, mark them as terminal leaves: they must not spawn, fork, create another task, or delegate. A fresh stage owner may itself be a child task and may still choose its own leaves.
 4. Give parallel writers non-overlapping ownership or isolated worktrees. Fan results back to the owner, then review the integrated candidate once rather than reviewing each worker, commit, or partial change. The owner may choose a fresh review stage when a clean context materially helps.
 5. Share truth through the approved artifact, Git SHAs, diff, test artifacts, and compact handoffs—not copied conversation history or hidden reasoning.
@@ -80,10 +81,12 @@ Keep the validated file until the local history hook copies it. Append this hidd
 Immediately before the receipt marker, append one single-line routing marker so private history can audit declared execution separately from delivery evidence:
 
 ```text
-<!-- auto-pilot-routing: {"implementation":{"lane":"direct","task_ref":null,"worktree":null,"model":"gpt-5.6-sol","thinking":"xhigh","reason":"Owner completed the PR stage in the current session."},"continuation":{"lane":"not_requested","task_ref":null,"worktree":null,"model":null,"thinking":null,"reason":null}} -->
+<!-- auto-pilot-routing: {"goal_id":null,"implementation":{"lane":"direct","task_ref":null,"worktree":null,"model":"gpt-5.6-sol","thinking":"xhigh","reason":"Owner completed the PR stage in the current session."},"continuation":{"lane":"not_requested","task_ref":null,"worktree":null,"model":null,"thinking":null,"reason":null}} -->
 ```
 
 Use `independent_task` when the owner chose a fresh primary implementation stage, `collaboration_subagent` only for a legacy or explicitly configured primary-subagent route, and `not_applicable` in release mode. Optional leaf workers do not replace the accountable implementation lane. Use `fresh_release_task`, `reused_release_task`, `fallback_command`, `not_requested`, or `current_release_task` for continuation. Include a short `reason` for direct work, an explicitly configured primary subagent, a reused task, a runtime fallback, or an unavailable task mechanism. When a user-visible task was created, also emit `::created-thread{threadId="<REF>"}` (or `clientThreadId`) and use the primary stage reference in the routing marker. Additional owner stages and leaf ancestry are best-effort routing evidence when the runtime does not expose their complete relationship; record them as unverified rather than inventing certainty. A missing or inconsistent routing marker does not change a valid delivery receipt.
+
+Set top-level `goal_id` only when a fresh Auto Pilot stage was actually created. The receiving prompt and the dispatching routing marker must carry the same ID; one-sided or mismatched evidence remains unverified and is excluded from goal-level benchmarks.
 
 For `released`, the final visible content must end with the exact Markdown stored in `release.message`; append the routing and receipt markers after it. Report exactly one terminal state: `pr_ready`, `merged_main`, `released`, or `blocked`. Do not commit agent-control artifacts unless the repository explicitly requires them.
 

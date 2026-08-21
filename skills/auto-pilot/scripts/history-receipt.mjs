@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto'
 import {spawnSync} from 'node:child_process'
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   lstatSync,
   readFileSync,
@@ -20,19 +21,22 @@ export function collectCompletionReceipt(message, expectedMode, directory) {
   const marker = typeof message === 'string' ? message.match(RECEIPT_MARKER) : null
   if (!marker) return receiptFailure('missing')
 
-  const source = marker[1].trim()
-  if (!source || source.length > 4096 || !isAbsolute(source)) return receiptFailure('invalid_path')
-  if (!regularFile(source)) return receiptFailure('missing_file', source)
-  if (lstatSync(source).size > MAX_RECEIPT_BYTES) return receiptFailure('too_large', source)
+  const markedSource = marker[1].trim()
+  if (!markedSource || markedSource.length > 4096 || !isAbsolute(markedSource)) return receiptFailure('invalid_path')
+  const snapshot = join(directory, 'receipt-source.json')
+  const validated = join(directory, 'receipt.json')
+  const source = regularFile(snapshot) ? snapshot : regularFile(validated) ? validated : markedSource
+  if (!regularFile(source)) return receiptFailure('missing_file', markedSource)
+  if (lstatSync(source).size > MAX_RECEIPT_BYTES) return receiptFailure('too_large', markedSource)
 
   let bytes
   let receipt
   try {
     bytes = readFileSync(source)
-    if (bytes.length > MAX_RECEIPT_BYTES) return receiptFailure('too_large', source)
+    if (bytes.length > MAX_RECEIPT_BYTES) return receiptFailure('too_large', markedSource)
     receipt = JSON.parse(bytes.toString('utf8'))
   } catch {
-    return receiptFailure('invalid_json', source)
+    return receiptFailure('invalid_json', markedSource)
   }
 
   const validation = spawnSync('python3', [RECEIPT_VALIDATOR, source], {
@@ -40,13 +44,13 @@ export function collectCompletionReceipt(message, expectedMode, directory) {
     timeout: 5000,
     windowsHide: true,
   })
-  if (validation.error) return receiptFailure('validator_unavailable', source)
-  if (validation.status !== 0) return receiptFailure('invalid_receipt', source)
+  if (validation.error) return receiptFailure('validator_unavailable', markedSource)
+  if (validation.status !== 0) return receiptFailure('invalid_receipt', markedSource)
 
   const error = receiptModeError(receipt, expectedMode)
-  if (error) return receiptFailure(error, source)
+  if (error) return receiptFailure(error, markedSource)
   const messageError = releaseMessageError(message, receipt)
-  if (messageError) return receiptFailure(messageError, source)
+  if (messageError) return receiptFailure(messageError, markedSource)
 
   writePrivateJson(join(directory, 'receipt.json'), receipt)
   return {
@@ -56,8 +60,34 @@ export function collectCompletionReceipt(message, expectedMode, directory) {
       schema_version: receipt.schema_version,
       mode: receipt.mode,
       receipt_sha256: sha256(bytes),
-      source_path_sha256: sha256(source),
+      source_path_sha256: sha256(markedSource),
     },
+  }
+}
+
+export function snapshotCompletionReceipt(message, directory) {
+  const marker = typeof message === 'string' ? message.match(RECEIPT_MARKER) : null
+  if (!marker) return {status: 'missing', source_path_sha256: null, receipt_sha256: null, bytes: 0}
+
+  const source = marker[1].trim()
+  if (!source || source.length > 4096 || !isAbsolute(source)) {
+    return {status: 'invalid_path', source_path_sha256: null, receipt_sha256: null, bytes: 0}
+  }
+  if (!regularFile(source)) return {status: 'missing_file', source_path_sha256: sha256(source), receipt_sha256: null, bytes: 0}
+  const size = lstatSync(source).size
+  if (size > MAX_RECEIPT_BYTES) return {status: 'too_large', source_path_sha256: sha256(source), receipt_sha256: null, bytes: size}
+
+  const destination = join(directory, 'receipt-source.json')
+  const temporary = join(directory, `.receipt-source.json.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`)
+  copyFileSync(source, temporary)
+  try { chmodSync(temporary, 0o600) } catch {}
+  renameSync(temporary, destination)
+  const bytes = readFileSync(destination)
+  return {
+    status: 'captured',
+    source_path_sha256: sha256(source),
+    receipt_sha256: sha256(bytes),
+    bytes: bytes.length,
   }
 }
 

@@ -3,6 +3,7 @@ const ROUTING_MARKER = /<!--\s*auto-pilot-routing:\s*(\{[^\r\n]*\})\s*-->/gi
 const CREATED_THREAD_DIRECTIVE = /::created-thread\{([^}]*)\}/g
 const TASK_REFERENCE = /(?:threadId|clientThreadId)="([^"]+)"/
 const RELEASE_FALLBACK = /\$auto-pilot\s+release\s+https?:\/\/[^\s/]+\/[^\s/]+\/[^\s/]+\/pull\/\d+(?=\s|$)/i
+const GOAL_ID = /^apg_[A-Za-z0-9_-]{12,80}$/
 
 const IMPLEMENTATION_LANES = new Set(['independent_task', 'direct', 'collaboration_subagent', 'not_applicable'])
 const CONTINUATION_LANES = new Set(['fresh_release_task', 'reused_release_task', 'fallback_command', 'not_requested', 'current_release_task'])
@@ -138,6 +139,9 @@ function validateShape(value, deviations) {
   if (!plainObject(value)) {
     deviations.push('routing marker must be an object')
     return
+  }
+  if (value.goal_id !== null && value.goal_id !== undefined && !GOAL_ID.test(value.goal_id)) {
+    deviations.push('goal_id must be an opaque apg_ identifier')
   }
   for (const section of ['implementation', 'continuation']) {
     if (!plainObject(value[section])) {

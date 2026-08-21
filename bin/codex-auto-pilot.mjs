@@ -3,7 +3,15 @@ import {readFileSync} from 'node:fs'
 import {dirname, join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {doctor, install} from '../lib/installer.mjs'
-import {historyReport, historyRuns, historyStatus, resolveHistoryRoot, setRawRetention} from '../skills/auto-pilot/scripts/history.mjs'
+import {
+  historyGoals,
+  historyReport,
+  historyRuns,
+  historyStatus,
+  materializeHistory,
+  resolveHistoryRoot,
+  setRawRetention,
+} from '../skills/auto-pilot/scripts/history.mjs'
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const version = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')).version
@@ -46,7 +54,7 @@ function parseOptions(argv) {
   return options
 }
 
-function historyCommand(argv) {
+async function historyCommand(argv) {
   const command = argv[0] || 'status'
   if (command === 'path') return console.log(resolveHistoryRoot())
   if (command === 'status') return printJson(historyStatus())
@@ -54,9 +62,11 @@ function historyCommand(argv) {
     if (!argv[1]) throw new Error('history retention requires a positive day count or forever')
     return printJson(setRawRetention(argv[1]))
   }
+  if (command === 'materialize') return printJson(await materializeHistory())
   const options = parseHistoryOptions(argv.slice(1))
-  if (command === 'list') return printJson(historyRuns(options))
-  if (command === 'report') return printJson(historyReport(options))
+  if (command === 'list') return printJson(await historyRuns(options))
+  if (command === 'goals') return printJson(await historyGoals(options))
+  if (command === 'report') return printJson(await historyReport(options))
   throw new Error(`unknown history command: ${command}`)
 }
 
@@ -83,8 +93,8 @@ Usage:
   codex-auto-pilot install [--dry-run] [--force] [--with-local-history]
   codex-auto-pilot doctor [--with-local-history]
   codex-auto-pilot skill-path
-  codex-auto-pilot history status|path|list|report
-  codex-auto-pilot history list|report [--since 30d]
+  codex-auto-pilot history status|path|materialize|list|goals|report
+  codex-auto-pilot history list|goals|report [--since 30d]
   codex-auto-pilot history retention <days|forever>
   codex-auto-pilot --version
 

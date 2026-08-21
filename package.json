@@ -1,6 +1,6 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Owner-directed Codex delivery with verified PRs, terminal leaf workers, and safe release boundaries.",
   "bin": {
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
@@ -28,7 +28,9 @@
     "skills/auto-pilot/scripts/history-receipt.mjs",
     "skills/auto-pilot/scripts/history-routing.mjs",
     "skills/auto-pilot/scripts/history.mjs",
+    "skills/auto-pilot/scripts/history-materialize.mjs",
     "skills/auto-pilot/scripts/resolve_config.mjs",
+    "skills/auto-pilot/scripts/new_goal_id.mjs",
     "skills/auto-pilot/scripts/validate_receipt.py",
     "install.sh",
     "README.md",

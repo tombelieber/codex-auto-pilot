@@ -1,15 +1,10 @@
 import {createHash} from 'node:crypto'
 import {
   chmodSync,
-  copyFileSync,
-  createReadStream,
   existsSync,
   lstatSync,
   mkdirSync,
-  openSync,
-  closeSync,
   readFileSync,
-  readSync,
   readdirSync,
   renameSync,
   rmSync,
@@ -18,27 +13,19 @@ import {
 } from 'node:fs'
 import {homedir} from 'node:os'
 import {basename, dirname, join} from 'node:path'
-import {createInterface} from 'node:readline'
 
 import {archiveInstalledSkillVersion, installedSkillBundle} from './history-bundle.mjs'
-import {collectCompletionReceipt} from './history-receipt.mjs'
-import {auditRouting} from './history-routing.mjs'
+import {materializePendingRuns} from './history-materialize.mjs'
+import {snapshotCompletionReceipt} from './history-receipt.mjs'
 import {resolveAutoPilotConfig} from './resolve_config.mjs'
 
-export const AUTO_PILOT_VERSION = '0.10.0'
-export const HISTORY_SCHEMA_VERSION = 3
+export const AUTO_PILOT_VERSION = '0.11.0'
+export const HISTORY_SCHEMA_VERSION = 4
 export const DEFAULT_RAW_RETENTION_DAYS = 90
 
-const TOKEN_FIELDS = [
-  'input_tokens',
-  'cached_input_tokens',
-  'cache_write_input_tokens',
-  'output_tokens',
-  'reasoning_output_tokens',
-  'total_tokens',
-]
 const SELECTED_SKILL = /^\s*\[\$auto-pilot\]\([^\r\n)]*[/\\]auto-pilot[/\\]SKILL\.md(?:#[^\r\n)]*)?\)(?=\s|$)/i
 const LEADING_SKILL = /^\s*\$auto-pilot(?=\s|$)/i
+const GOAL_MARKER = /<!--\s*auto-pilot-goal:\s*(apg_[A-Za-z0-9_-]{12,80})\s*-->/i
 const NON_EXECUTION_REQUEST = /(?:do not|don't|dont|never)\s+(?:start|run|execute)|(?:just|only)\s+(?:confirm|answer|advise|explain|review|analyse|analyze)|what\s+do\s+you\s+think|how\s+(?:do|can|should|would)\b[^\r\n]{0,80}\b(?:improve|optimise|optimize|design)|\b(?:improve|optimise|optimize|review|analyse|analyze)\b[^\r\n]{0,80}\b(?:skill|auto[ -]?pilot)|(?:優化|改善|檢討)[^\r\n]{0,40}(?:skill|auto[ -]?pilot)|不要(?:開始|執行)|唔好(?:開始|執行)|只(?:需|要)?[^\r\n]{0,12}(?:確認|回答|建議|解釋|分析)|有冇足夠[^\r\n]{0,40}(?:開始|執行)/i
 const NO_RELEASE_CONTINUATION = /(?:do not|don't|dont|never|without)\s+(?:merge|release|deploy|ship|go\s+live)|(?:不要|唔好|不用|唔使|毋須)[^\r\n]{0,20}(?:release|deploy|ship|merge|發布|發佈|上線)/i
 const RELEASE_CONTINUATION = /--then-release\b|(?:finish|complete|implement|build|fix|do)\b[^\r\n]{0,100}\b(?:and|then)\b[^\r\n]{0,30}\b(?:merge|release|deploy|ship|go\s+live)\b|(?:after|once|when)\b[^\r\n]{0,100}\b(?:release|deploy|ship|go\s+live)\b|(?:merge)\b[^\r\n]{0,30}\b(?:and|then)\b[^\r\n]{0,20}\b(?:release|deploy|ship|go\s+live)\b|(?:完成|做完|搞掂)[^\r\n]{0,60}(?:之後|後|然后|然後|並|同埋|再|就)[^\r\n]{0,30}(?:release|deploy|ship|發布|發佈|上線)|(?:直接|自動)[^\r\n]{0,20}(?:release|deploy|ship|發布|發佈|上線)/i
@@ -53,7 +40,6 @@ const AMBIGUOUS_RELEASE_CONTINUATION = [
   /["“”][^\r\n"“”]{0,120}(?:發布|發佈|上線|部署|合併|合并)[^\r\n"“”]{0,120}["“”]/i,
   /(?:想|希望|可能|也許|也许|第時|遲啲|迟点|將來|将来)[^\r\n]{0,60}(?:merge|release|deploy|ship|go\s+live|發布|發佈|上線|部署|合併|合并)/i,
 ]
-const TAIL_BYTES = 4 * 1024 * 1024
 
 export function resolveHistoryRoot(env = process.env) {
   return env.CODEX_AUTO_PILOT_DATA || join(homedir(), '.codex-auto-pilot', 'history')
@@ -84,6 +70,7 @@ export function parseAutoPilotInvocation(prompt) {
     continuation,
     invocation_source: command ? 'leading_command' : 'leading_skill_selection',
     explicit_subcommand: subcommand,
+    goal_id: argument.match(GOAL_MARKER)?.[1] || null,
   }
 }
 
@@ -118,10 +105,9 @@ export async function handleHookEvent(event, options = {}) {
 function startRun(event, {dataRoot, now, invocation, env}) {
   requireIds(event)
   ensurePrivateDirectory(dataRoot)
-  pruneExpiredRaw(dataRoot, now())
   const directory = runDirectory(dataRoot, event.session_id, event.turn_id)
   ensurePrivateDirectory(directory)
-  const transcript = transcriptSnapshot(event.transcript_path)
+  const transcriptBytes = transcriptByteSize(event.transcript_path)
   const bundle = installedSkillBundle()
   const routingConfig = resolveAutoPilotConfig({env, prompt: event.prompt, strict: false})
   archiveInstalledSkillVersion(dataRoot, bundle, now(), {
@@ -144,6 +130,9 @@ function startRun(event, {dataRoot, now, invocation, env}) {
     continuation: invocation.continuation,
     invocation_source: invocation.invocation_source,
     explicit_subcommand: invocation.explicit_subcommand,
+    goal_id: invocation.goal_id || runKey(event.session_id, event.turn_id),
+    goal_id_source: invocation.goal_id ? 'invocation_marker' : 'run_id',
+    goal_id_sources: [invocation.goal_id ? 'invocation_marker' : 'run_id'],
     started_at: now().toISOString(),
     ended_at: null,
     cwd: stringOrNull(event.cwd),
@@ -153,8 +142,11 @@ function startRun(event, {dataRoot, now, invocation, env}) {
     routing_config: routingConfig,
     invocation_prompt_sha256: sha256Text(event.prompt),
     transcript_source: stringOrNull(event.transcript_path),
-    transcript_start_bytes: transcript.bytes,
-    baseline_token_usage: transcript.token_usage,
+    transcript_start_bytes: transcriptBytes,
+    transcript_end_bytes: null,
+    parser_version: null,
+    materializer_version: null,
+    materialized_at: null,
     raw_retention_days: historyConfig(dataRoot).raw_retention_days,
     raw_pruned_at: null,
   }
@@ -162,43 +154,30 @@ function startRun(event, {dataRoot, now, invocation, env}) {
   return {handled: true, action: 'started', run_id: manifest.run_id, directory}
 }
 
-async function archiveSubagent(event, {dataRoot, now}) {
+function archiveSubagent(event, {dataRoot, now}) {
   if (!event.session_id || !event.turn_id || !event.agent_id) return {handled: false, reason: 'missing_ids'}
   const directory = runDirectory(dataRoot, event.session_id, event.turn_id)
   if (!existsSync(join(directory, 'manifest.json'))) return {handled: false, reason: 'run_not_active'}
-  if (!regularFile(event.agent_transcript_path)) return {handled: false, reason: 'missing_transcript'}
-
   const agents = join(directory, 'agents')
   ensurePrivateDirectory(agents)
   const key = safeSegment(event.agent_id)
-  const destination = join(agents, `${key}.jsonl`)
-  copyPrivateFile(event.agent_transcript_path, destination)
-  const parsed = await parseTranscriptSegment(destination, 0, null)
-  const metadata = {
+  const marker = {
     schema_version: HISTORY_SCHEMA_VERSION,
     agent_id: event.agent_id,
     agent_type: stringOrNull(event.agent_type),
-    model: parsed.model,
-    effort: parsed.effort,
-    archived_at: now().toISOString(),
-    transcript_bytes: statSync(destination).size,
-    transcript_sha256: await sha256File(destination),
-    token_usage_observed: parsed.token_usage_observed,
-    token_usage: parsed.token_usage_observed ? parsed.latest_total_token_usage : null,
-    tool_calls: parsed.tool_calls,
-    tools: parsed.tools,
-    compactions: parsed.compactions,
-    parse_errors: parsed.parse_errors,
+    stopped_at: now().toISOString(),
+    transcript_source: stringOrNull(event.agent_transcript_path),
+    transcript_end_bytes: transcriptByteSize(event.agent_transcript_path),
   }
-  writePrivateJson(join(agents, `${key}.json`), metadata)
-  return {handled: true, action: 'subagent_archived', agent_id: event.agent_id}
+  writePrivateJson(join(agents, `${key}.marker.json`), marker)
+  return {handled: true, action: 'subagent_marked', agent_id: event.agent_id}
 }
 
 async function finalizeTurn(event, context) {
   if (!event.session_id || !event.turn_id) return {handled: false, reason: 'missing_ids'}
   const directory = runDirectory(context.dataRoot, event.session_id, event.turn_id)
   if (!existsSync(join(directory, 'manifest.json'))) return {handled: false, reason: 'run_not_active'}
-  return finalizeRun(directory, event, context)
+  return markRunTerminal(directory, event, context)
 }
 
 async function finalizeSession(event, context) {
@@ -207,87 +186,39 @@ async function finalizeSession(event, context) {
   for (const directory of runDirectories(context.dataRoot)) {
     const manifest = readJson(join(directory, 'manifest.json'))
     if (manifest?.session_id !== event.session_id || manifest.status !== 'running') continue
-    results.push(await finalizeRun(directory, event, {...context, reason: 'session_end'}))
+    results.push(markRunTerminal(directory, event, {...context, reason: 'session_end'}))
   }
   return results.length ? {handled: true, action: 'session_recovered', runs: results.length} : {handled: false, reason: 'run_not_active'}
 }
 
-async function finalizeRun(directory, event, {now, reason}) {
+function markRunTerminal(directory, event, {now, reason}) {
   const manifestPath = join(directory, 'manifest.json')
   const manifest = readJson(manifestPath)
   if (!manifest) return {handled: false, reason: 'missing_manifest'}
-  if (manifest.status === 'finished' && reason !== 'session_end') return {handled: true, action: 'already_finished', run_id: manifest.run_id}
-
-  const transcriptPath = regularFile(event.transcript_path) ? event.transcript_path : manifest.transcript_source
-  let archived = null
-  let parsed = emptyParsedMetrics()
-  if (regularFile(transcriptPath)) {
-    const destination = join(directory, 'transcript.jsonl')
-    copyPrivateFile(transcriptPath, destination)
-    archived = {
-      bytes: statSync(destination).size,
-      sha256: await sha256File(destination),
-    }
-    parsed = await parseTranscriptSegment(destination, manifest.transcript_start_bytes || 0, manifest.turn_id)
-  }
+  if (manifest.status === 'finished') return {handled: true, action: 'already_finished', run_id: manifest.run_id}
 
   const endedAt = now()
-  const tokenUsage = subtractTokenUsage(parsed.latest_total_token_usage, manifest.baseline_token_usage)
-  const agentMetadata = listAgentMetadata(directory)
-  const completion = await collectCompletionReceipt(event.last_assistant_message, manifest.mode, directory)
-  const terminalState = completion.terminal_state
-  const routing = auditRouting({
-    message: event.last_assistant_message,
-    manifest,
-    subagents: agentMetadata.length,
-  })
-  const metrics = {
+  const transcriptPath = regularFile(event.transcript_path) ? event.transcript_path : manifest.transcript_source
+  const receiptSnapshot = snapshotCompletionReceipt(event.last_assistant_message, directory)
+  writePrivateJson(join(directory, 'terminal.json'), {
     schema_version: HISTORY_SCHEMA_VERSION,
     run_id: manifest.run_id,
-    duration_ms: Math.max(0, endedAt.getTime() - Date.parse(manifest.started_at)),
-    model: parsed.model || manifest.model,
-    effort: parsed.effort || manifest.effort,
-    collection_complete: Boolean(archived && parsed.token_usage_observed),
-    token_usage_observed: parsed.token_usage_observed,
-    token_counter_reset: tokenCounterReset(parsed.latest_total_token_usage, manifest.baseline_token_usage),
-    token_usage: {
-      ...tokenUsage,
-      uncached_input_tokens: Math.max(0, (tokenUsage.input_tokens || 0) - (tokenUsage.cached_input_tokens || 0)),
-    },
-    tool_calls: parsed.tool_calls,
-    tools: parsed.tools,
-    compactions: parsed.compactions,
-    parse_errors: parsed.parse_errors,
-    subagents: agentMetadata.length,
-    subagent_types: countValues(agentMetadata.map((item) => item.agent_type).filter(Boolean)),
-    subagent_models: countValues(agentMetadata.map((item) => item.model).filter(Boolean)),
-    subagent_efforts: countValues(agentMetadata.map((item) => item.effort).filter(Boolean)),
-    routing,
-    transcript_bytes: archived?.bytes || 0,
-    transcript_sha256: archived?.sha256 || null,
-  }
-  writePrivateJson(join(directory, 'metrics.json'), metrics)
-
-  const outcome = {
-    schema_version: HISTORY_SCHEMA_VERSION,
-    run_id: manifest.run_id,
-    terminal_state: terminalState,
-    completion_receipt: completion.evidence,
-    collection_reason: reason,
+    reason,
     ended_at: endedAt.toISOString(),
+    transcript_source: stringOrNull(transcriptPath),
+    transcript_end_bytes: transcriptByteSize(transcriptPath),
     last_assistant_message_sha256: sha256Text(event.last_assistant_message),
-  }
-  writePrivateJson(join(directory, 'outcome.json'), outcome)
+    receipt_snapshot: receiptSnapshot,
+  })
   writePrivateJson(manifestPath, {
     ...manifest,
-    status: 'finished',
-    terminal_state: terminalState,
+    status: 'pending_materialization',
+    terminal_state: null,
     ended_at: endedAt.toISOString(),
-    model: metrics.model,
-    effort: metrics.effort,
-    orchestration_status: routing.status,
+    transcript_source: stringOrNull(transcriptPath) || manifest.transcript_source,
+    transcript_end_bytes: transcriptByteSize(transcriptPath),
   })
-  return {handled: true, action: 'finished', run_id: manifest.run_id, terminal_state: terminalState}
+  return {handled: true, action: 'marked_terminal', run_id: manifest.run_id}
 }
 
 export function historyConfig(dataRoot = resolveHistoryRoot()) {
@@ -338,12 +269,19 @@ export function historyStatus(dataRoot = resolveHistoryRoot()) {
     retention: historyConfig(dataRoot).raw_retention_days,
     runs: runs.length,
     running: runs.filter((run) => run.manifest.status === 'running').length,
+    pending_materialization: runs.filter((run) => run.manifest.status === 'pending_materialization').length,
     finished: runs.filter((run) => run.manifest.status === 'finished').length,
     raw_bytes: rawBytes,
   }
 }
 
-export function historyRuns({dataRoot = resolveHistoryRoot(), sinceDays = null} = {}) {
+export async function materializeHistory({dataRoot = resolveHistoryRoot(), now = () => new Date()} = {}) {
+  const result = await materializePendingRuns({dataRoot, schemaVersion: HISTORY_SCHEMA_VERSION, now})
+  return {...result, retention: pruneExpiredRaw(dataRoot, now())}
+}
+
+export async function historyRuns({dataRoot = resolveHistoryRoot(), sinceDays = null, materialize = true} = {}) {
+  if (materialize) await materializeHistory({dataRoot})
   const cutoff = sinceDays ? Date.now() - sinceDays * 24 * 60 * 60 * 1000 : null
   return loadRuns(dataRoot)
     .filter((run) => !cutoff || Date.parse(run.manifest.started_at) >= cutoff)
@@ -359,18 +297,32 @@ export function historyRuns({dataRoot = resolveHistoryRoot(), sinceDays = null} 
       continuation: run.manifest.continuation ?? null,
       terminal_state: run.manifest.terminal_state,
       completion_receipt_status: run.outcome?.completion_receipt?.status ?? 'legacy_unverified',
-      benchmark_eligible: run.outcome?.completion_receipt?.status === 'valid',
+      benchmark_eligible: run.outcome?.completion_receipt?.status === 'valid'
+        && (run.manifest.schema_version < 4 || run.metrics?.collection_complete === true)
+        && (run.metrics?.subagents === 0 || run.metrics?.subagent_token_accounting_complete === true),
       total_tokens: run.metrics?.token_usage_observed === false ? null : (run.metrics?.token_usage?.total_tokens ?? null),
+      lifecycle_total_tokens: (
+        run.metrics?.subagents === 0
+        || run.metrics?.subagent_token_accounting_complete === true
+        || (run.manifest.schema_version < 4 && run.metrics?.subagents === 0)
+      ) ? (run.metrics?.token_usage?.total_tokens ?? null) : null,
       cached_input_tokens: run.metrics?.token_usage?.cached_input_tokens ?? null,
       tool_calls: run.metrics?.tool_calls ?? null,
       subagents: run.metrics?.subagents ?? null,
       orchestration_status: run.metrics?.routing?.status ?? run.manifest.orchestration_status ?? 'legacy_unobserved',
+      goal_id: run.manifest.goal_id ?? run.manifest.run_id,
+      goal_id_source: run.manifest.goal_id_source ?? 'legacy_unlinked',
+      goal_id_sources: run.manifest.goal_id_sources ?? [run.manifest.goal_id_source ?? 'legacy_unlinked'],
+      ended_at: run.manifest.ended_at ?? null,
+      compactions: run.metrics?.compactions ?? null,
+      topology: run.metrics?.topology ?? null,
     }))
     .sort((left, right) => left.started_at.localeCompare(right.started_at))
 }
 
-export function historyReport(options = {}) {
-  const runs = historyRuns(options).filter((run) => Number.isFinite(run.total_tokens))
+export async function historyReport(options = {}) {
+  const allRuns = await historyRuns(options)
+  const runs = allRuns.filter((run) => Number.isFinite(run.total_tokens))
   const totals = runs.map((run) => run.total_tokens).sort((a, b) => a - b)
   const medianTokens = percentile(totals, 0.5)
   const threshold = medianTokens === null ? null : medianTokens * 2
@@ -381,6 +333,8 @@ export function historyReport(options = {}) {
     if (!versions[version]) versions[version] = new Set()
     if (run.skill_bundle_sha256) versions[version].add(run.skill_bundle_sha256)
   }
+  const goals = summarizeGoals(allRuns)
+  const benchmarkGoals = goals.filter((goal) => goal.benchmark_eligible)
   return {
     runs: runs.length,
     benchmark_runs: benchmark.length,
@@ -397,7 +351,15 @@ export function historyReport(options = {}) {
     version_bundles: Object.fromEntries(Object.entries(versions).map(([version, hashes]) => [version, [...hashes].sort()])),
     version_drift: Object.entries(versions).filter(([, hashes]) => hashes.size > 1).map(([version]) => version),
     benchmark: summarizeRuns(benchmark),
+    goals: goals.length,
+    benchmark_goals: benchmarkGoals.length,
+    excluded_unverified_goals: goals.length - benchmarkGoals.length,
+    goal_benchmark: summarizeGoalCohort(benchmarkGoals),
   }
+}
+
+export async function historyGoals(options = {}) {
+  return summarizeGoals(await historyRuns(options))
 }
 
 function loadRuns(dataRoot) {
@@ -421,66 +383,69 @@ function summarizeRuns(runs) {
   }
 }
 
-async function parseTranscriptSegment(path, requestedStart, turnId) {
-  const parsed = emptyParsedMetrics()
-  const size = statSync(path).size
-  const start = Number.isFinite(requestedStart) && requestedStart >= 0 && requestedStart <= size ? requestedStart : 0
-  const stream = createReadStream(path, {encoding: 'utf8', start})
-  const lines = createInterface({input: stream, crlfDelay: Infinity})
-  for await (const line of lines) {
-    if (!line.trim()) continue
-    let event
-    try { event = JSON.parse(line) } catch { parsed.parse_errors += 1; continue }
-    if (event.type === 'event_msg' && event.payload?.type === 'token_count') {
-      parsed.latest_total_token_usage = normalizeTokenUsage(event.payload.info?.total_token_usage)
-      parsed.token_usage_observed = true
-    }
-    if (event.type === 'turn_context' && (!turnId || event.payload?.turn_id === turnId)) {
-      parsed.model = stringOrNull(event.payload?.model) || parsed.model
-      parsed.effort = stringOrNull(event.payload?.effort) || parsed.effort
-    }
-    if (event.type === 'response_item' && ['function_call', 'custom_tool_call'].includes(event.payload?.type)) {
-      parsed.tool_calls += 1
-      const name = event.payload?.name || event.payload?.namespace || 'unknown'
-      parsed.tools[name] = (parsed.tools[name] || 0) + 1
-    }
-    if (event.type === 'event_msg' && event.payload?.type === 'context_compacted') parsed.compactions += 1
+function summarizeGoals(runs) {
+  const grouped = new Map()
+  for (const run of runs) {
+    const goalId = run.goal_id || run.run_id
+    if (!grouped.has(goalId)) grouped.set(goalId, [])
+    grouped.get(goalId).push(run)
   }
-  return parsed
+  return [...grouped.entries()].map(([goalId, items]) => {
+    const sorted = [...items].sort((left, right) => left.started_at.localeCompare(right.started_at))
+    const sources = new Set(sorted.flatMap((run) => run.goal_id_sources || [run.goal_id_source]))
+    const linked = sorted.length > 1 && sources.has('routing_marker') && sources.has('invocation_marker')
+    const single = sorted.length === 1 && sources.has('run_id')
+    const lineageStatus = linked ? 'linked' : single ? 'single_run' : 'unverified'
+    const starts = sorted.map((run) => Date.parse(run.started_at)).filter(Number.isFinite)
+    const ends = sorted.map((run) => Date.parse(run.ended_at)).filter(Number.isFinite)
+    const allTokensKnown = sorted.every((run) => Number.isFinite(run.lifecycle_total_tokens))
+    const allDurationsKnown = sorted.every((run) => Number.isFinite(run.duration_ms))
+    const allCompactionsKnown = sorted.every((run) => Number.isFinite(run.compactions))
+    return {
+      goal_id: goalId,
+      lineage_status: lineageStatus,
+      runs: sorted.length,
+      run_ids: sorted.map((run) => run.run_id),
+      started_at: starts.length ? new Date(Math.min(...starts)).toISOString() : null,
+      ended_at: ends.length === sorted.length ? new Date(Math.max(...ends)).toISOString() : null,
+      wall_duration_ms: starts.length && ends.length === sorted.length ? Math.max(...ends) - Math.min(...starts) : null,
+      active_duration_ms: allDurationsKnown ? sorted.reduce((sum, run) => sum + run.duration_ms, 0) : null,
+      total_tokens: allTokensKnown ? sorted.reduce((sum, run) => sum + run.lifecycle_total_tokens, 0) : null,
+      tool_calls: sorted.every((run) => Number.isFinite(run.tool_calls))
+        ? sorted.reduce((sum, run) => sum + run.tool_calls, 0) : null,
+      compactions: allCompactionsKnown ? sorted.reduce((sum, run) => sum + run.compactions, 0) : null,
+      subagents: sorted.every((run) => Number.isFinite(run.subagents))
+        ? sorted.reduce((sum, run) => sum + run.subagents, 0) : null,
+      models: countValues(sorted.map((run) => run.model || 'unknown')),
+      max_observed_agent_depth: sorted.every((run) => run.topology?.max_observed_depth !== null && run.topology?.max_observed_depth !== undefined)
+        ? Math.max(...sorted.map((run) => run.topology.max_observed_depth))
+        : null,
+      terminal_states: countValues(sorted.map((run) => run.terminal_state || 'unknown')),
+      benchmark_eligible: ['linked', 'single_run'].includes(lineageStatus)
+        && sorted.every((run) => run.benchmark_eligible)
+        && allTokensKnown,
+    }
+  }).sort((left, right) => (left.started_at || '').localeCompare(right.started_at || ''))
 }
 
-function transcriptSnapshot(path) {
-  if (!regularFile(path)) return {bytes: 0, token_usage: zeroTokenUsage()}
-  const stats = statSync(path)
-  const bytesToRead = Math.min(stats.size, TAIL_BYTES)
-  const start = stats.size - bytesToRead
-  const descriptor = openSync(path, 'r')
-  const buffer = Buffer.alloc(bytesToRead)
-  try { readSync(descriptor, buffer, 0, bytesToRead, start) } finally { closeSync(descriptor) }
-  const text = buffer.toString('utf8')
-  const lines = text.split(/\r?\n/)
-  if (start > 0) lines.shift()
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    try {
-      const event = JSON.parse(lines[index])
-      if (event.type === 'event_msg' && event.payload?.type === 'token_count') {
-        return {bytes: stats.size, token_usage: normalizeTokenUsage(event.payload.info?.total_token_usage)}
-      }
-    } catch {}
+function summarizeGoalCohort(goals) {
+  const totals = goals.map((goal) => goal.total_tokens).filter(Number.isFinite).sort((a, b) => a - b)
+  const wall = goals.map((goal) => goal.wall_duration_ms).filter(Number.isFinite).sort((a, b) => a - b)
+  return {
+    goals: goals.length,
+    total_tokens: totals.reduce((sum, value) => sum + value, 0),
+    median_tokens: percentile(totals, 0.5),
+    p95_tokens: percentile(totals, 0.95),
+    median_wall_duration_ms: percentile(wall, 0.5),
   }
-  return {bytes: stats.size, token_usage: zeroTokenUsage()}
-}
-
-function listAgentMetadata(directory) {
-  const agents = join(directory, 'agents')
-  if (!existsSync(agents)) return []
-  return readdirSync(agents).filter((name) => name.endsWith('.json')).map((name) => readJson(join(agents, name))).filter(Boolean)
 }
 
 function rawTranscriptPaths(directory) {
   const paths = []
   const root = join(directory, 'transcript.jsonl')
   if (regularFile(root)) paths.push(root)
+  const receiptSource = join(directory, 'receipt-source.json')
+  if (regularFile(receiptSource)) paths.push(receiptSource)
   const agents = join(directory, 'agents')
   if (existsSync(agents) && lstatSync(agents).isDirectory()) {
     for (const name of readdirSync(agents)) {
@@ -535,52 +500,17 @@ function writePrivateJson(path, value) {
   try { chmodSync(path, 0o600) } catch {}
 }
 
-function copyPrivateFile(source, destination) {
-  ensurePrivateDirectory(dirname(destination))
-  const temporary = join(dirname(destination), `.${basename(destination)}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`)
-  copyFileSync(source, temporary)
-  try { chmodSync(temporary, 0o600) } catch {}
-  renameSync(temporary, destination)
-}
-
 function readJson(path) {
   try { return JSON.parse(readFileSync(path, 'utf8')) } catch { return null }
-}
-
-async function sha256File(path) {
-  const hash = createHash('sha256')
-  for await (const chunk of createReadStream(path)) hash.update(chunk)
-  return hash.digest('hex')
 }
 
 function sha256Text(value) {
   return typeof value === 'string' ? createHash('sha256').update(value).digest('hex') : null
 }
 
-function normalizeTokenUsage(value) {
-  const result = {}
-  for (const field of TOKEN_FIELDS) result[field] = nonNegativeNumber(value?.[field])
-  return result
-}
-
-function subtractTokenUsage(latest, baseline) {
-  const result = {}
-  for (const field of TOKEN_FIELDS) result[field] = Math.max(0, nonNegativeNumber(latest?.[field]) - nonNegativeNumber(baseline?.[field]))
-  return result
-}
-
-function zeroTokenUsage() { return normalizeTokenUsage(null) }
-function nonNegativeNumber(value) { return Number.isFinite(value) && value >= 0 ? value : 0 }
 function stringOrNull(value) { return typeof value === 'string' && value ? value : null }
 function positiveInteger(value) { return Number.isInteger(value) && value > 0 ? value : undefined }
-
-function emptyParsedMetrics() {
-  return {latest_total_token_usage: zeroTokenUsage(), token_usage_observed: false, model: null, effort: null, tool_calls: 0, tools: {}, compactions: 0, parse_errors: 0}
-}
-
-function tokenCounterReset(latest, baseline) {
-  return TOKEN_FIELDS.some((field) => nonNegativeNumber(latest?.[field]) < nonNegativeNumber(baseline?.[field]))
-}
+function transcriptByteSize(path) { return regularFile(path) ? statSync(path).size : 0 }
 
 function installedSkillHash() {
   try { return createHash('sha256').update(readFileSync(new URL('../SKILL.md', import.meta.url))).digest('hex') } catch { return null }

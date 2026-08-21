@@ -1,42 +1,124 @@
 # Local Run History Schema
 
-Automatic history collection writes one private directory per explicit Auto Pilot invocation:
+Automatic history collection writes one private directory per explicit Auto
+Pilot invocation. New schema-v4 runs use thin markers first and derived files
+later:
 
 ```text
 ~/.codex-auto-pilot/history/runs/<session-id>--<turn-id>/
 ├── manifest.json
-├── transcript.jsonl
+├── terminal.json                 # after Stop or SessionEnd
+├── receipt-source.json           # small ephemeral source snapshot, when present
 ├── agents/
-│   ├── <agent-id>.json
-│   └── <agent-id>.jsonl
-├── metrics.json
-├── receipt.json              # verified terminal runs only
-└── outcome.json
+│   ├── <agent-id>.marker.json
+│   └── <agent-id>.json           # derived metadata
+├── metrics.json                  # post-hoc derived
+├── receipt.json                  # post-hoc validated terminal receipt
+└── outcome.json                  # post-hoc derived
 ```
 
-Only a leading `$auto-pilot ...` command or leading Auto Pilot skill selection starts a run. Inline mentions, design discussions, optimization requests, and explicit “do not start” prompts are excluded.
+The collector never writes model context. Only a leading `$auto-pilot ...`
+command or leading Auto Pilot skill selection starts a run. Inline mentions,
+design discussions, optimization requests, and explicit “do not start” prompts
+are excluded.
 
-`manifest.json` identifies the run mode, requested release continuation, collector and skill versions, the installed `SKILL.md` hash, the complete skill-bundle hash and per-file hashes, start/end times, model, effort, resolved Auto Pilot preferences, source offset, and retention state. Resolved preferences include their optional user-config source, explicit invocation overrides, and non-fatal collection warnings. `ship`, `--then-release`, and an unambiguous current implementation-then-release imperative record `continuation: release`; this is observational metadata, not standalone production authority. The manifest stores only a hash of the invocation prompt; the original prompt remains in the archived transcript.
+## Thin synchronous markers
 
-The first run of each complete bundle is also archived under `~/.codex-auto-pilot/history/versions/<bundle-sha256>/`. This preserves the exact skill, references, scripts, tests, and agent metadata needed to explain a later version comparison. A semantic version associated with multiple bundle hashes is reported as version drift.
+`UserPromptSubmit` writes `manifest.json` with the invocation mode, requested
+release continuation, session/turn IDs, source transcript path and byte
+boundary, prompt hash, model, permission mode, resolved preferences, and exact
+installed skill-bundle identity. The bundle is archived once per hash because
+the exact runtime instructions cannot be reconstructed after an upgrade. It
+does not scan transcript token events.
 
-`metrics.json` contains deterministic measurements:
+`SubagentStop` writes only agent ID/type, transcript path, terminal byte size,
+and timestamp. It does not copy, hash, or parse the transcript.
 
-- Token totals and uncached input derived from the Codex cumulative usage delta.
-- Duration, model, effort, tool calls, tool names, subagent count, subagent model/effort metadata when the hook exposes it, and compactions.
-- A separate routing audit derived from the final `auto-pilot-routing` marker, `::created-thread{threadId|clientThreadId="..."}` directives, resolved preferences, and archived subagent count. Its status is `passed`, `fallback`, `deviation`, or `unknown`; an `unverified` list records relationships the runtime does not expose.
-- Transcript byte count and SHA-256 for integrity and reprocessing.
-- Parse errors, which must remain visible instead of silently dropping unsupported records.
-- Collection-complete and token-counter-reset flags so missing or incompatible usage evidence is never presented as a real zero-token run.
+`Stop` writes `terminal.json`, updates the manifest to
+`pending_materialization`, and snapshots a referenced receipt file of at most
+1 MiB before a temporary source can disappear. It stores the final-message hash
+but not a second copy of the message. `SessionEnd` writes the same boundary for
+recoverable unfinished runs. Hooks return inert `{}` and never call a model or
+upload data.
 
-`outcome.json` accepts a terminal state only from a fully validated v7 receipt referenced by the hidden final-response marker. Successful merge/release receipts require evidenced automatic task-worktree cleanup. The hook invokes the same validator used by the controller, copies that receipt to `receipt.json`, and records its SHA-256 plus a hash of the source path. For `released`, it also verifies that the final visible response ends with the exact `release.message` stored in the receipt; the hidden routing and receipt markers may follow it. It never infers success from prose or from a shallow mode/state object. Missing, invalid, oversized, mode-mismatched, cleanup-incomplete, or release-message-mismatched evidence produces `unknown` and is excluded from the benchmark cohort.
+## Post-hoc materialization
 
-Routing audit never changes a valid completion receipt. Delivery and release authority are outcome facts; model choice and execution topology are operational facts. A missing routing marker therefore yields `orchestration_status: unknown`, while an impossible lane, an undisclosed model fallback, a primary subagent without explicit configuration, a newly created primary task reference without a matching `::created-thread` directive, an undeclared task on a direct lane, or contradictory routing markers yields `deviation`. Additional task directives on an independent implementation lane may represent owner-selected continuation stages; their relationship is recorded as `unverified` unless the runtime exposes enough evidence. Agent parent-child delegation depth is likewise `unverified` whenever subagents exist because current hooks expose count and metadata, not parent-child ancestry. An exact reused release task still requires its existing task reference and a reason. An owner-selected direct lane can pass; a disclosed task-creation or model fallback yields `fallback`.
+`codex-auto-pilot history materialize` reads each referenced Codex JSONL only
+through its recorded terminal byte boundary. `history list`, `history goals`,
+and `history report` materialize pending runs automatically. If Codex moved a
+recorded active-session file, the materializer checks the corresponding local
+`archived_sessions` filename before declaring it unavailable. The parser:
 
-Reports retain legacy totals for continuity, count requested continuations and orchestration statuses, and calculate a separate benchmark cohort from receipt-verified runs only. Compare model or skill versions using that cohort and task-local quality evidence, never raw mixed historical totals. Treat routing conformance as a separate analysis dimension rather than a delivery-success gate.
+- uses `last_token_usage` as the primary per-event increment;
+- uses cumulative totals only for exact-duplicate, stale-regression, and reset
+  detection, with a legacy cumulative-only fallback;
+- clamps cached input to input and reasoning output to output, because those
+  buckets overlap rather than add to the reported total;
+- counts both legacy `context_compacted` and current top-level `compacted`
+  records;
+- derives raw model/effort, tools, final assistant message, and subagent
+  session/parent/depth metadata; and
+- keeps parse warnings, parse errors, source availability, and final-message
+  hash agreement explicit.
 
-Runs written before schema v3 have no routing audit inferred retroactively; reports label them `legacy_unobserved` while preserving their existing totals and receipt eligibility.
+Token data is `null` when no trustworthy token event exists. Source loss,
+message mismatch, malformed receipt evidence, and incomplete lineage never
+become a real zero or a successful benchmark run.
 
-The original JSONL is canonical evidence. Derived schemas are versioned because Codex transcript fields may change. Raw root and subagent transcripts expire after 90 days by default; manifests, metrics, outcomes, and subagent metadata remain.
+Root and agent token evidence stays separate. Schema v4 does not yet claim a
+complete lifecycle token total for runs with collaboration agents because
+forked agent JSONL can replay parent history. Those runs keep per-agent
+unverified token metadata and topology evidence but remain outside token-cost
+benchmark cohorts until semantic replay deduplication is proven by a later
+parser version.
 
-All collection is local, deterministic, and model-free. Do not commit or upload this archive.
+The marker schema, Codex parser version, and materializer version are tracked
+independently. A parser/materializer version change rebuilds schema-v4 derived
+files when their terminal marker and source evidence remain available. Runs
+written before schema v4 remain readable and are not assigned invented
+lineage.
+
+## Outcome and routing evidence
+
+Post-hoc receipt validation uses the same v7 validator as the controller and
+accepts a terminal state only from the preserved receipt plus the exact final
+assistant message reconstructed from JSONL. Missing, invalid, oversized,
+mode-mismatched, cleanup-incomplete, or release-message-mismatched evidence
+produces `unknown` and is excluded from benchmark cohorts.
+
+Routing audit remains separate from delivery authority. It records `passed`,
+`fallback`, `deviation`, or `unknown` from the final routing marker, created-task
+directives, resolved preferences, and observed agent metadata. It never changes
+a valid receipt.
+
+## Fresh-stage goal lineage
+
+Direct one-session work needs no extra telemetry action and uses its run ID as
+its local goal ID. When an owner actually creates a fresh Auto Pilot stage, it
+generates one opaque `apg_...` ID and places it on both sides:
+
+```text
+receiving prompt: <!-- auto-pilot-goal: apg_... -->
+dispatching final routing marker: {"goal_id":"apg_...", ...}
+```
+
+A group with both a routing-side and invocation-side breadcrumb is `linked`.
+One-sided or mismatched groups are `unverified`. Goal metrics preserve wall
+duration (minimum start to maximum end), summed active duration, complete token
+totals, tools, compactions, observed depth, models, and terminal states. They do
+not collapse quality and cost into an arbitrary scalar score.
+
+Only receipt-valid single runs or fully linked, receipt-valid chains with known
+token totals enter the goal benchmark cohort. Compare comparable work by
+quality first, then median/p95 tokens and wall time.
+
+## Storage and privacy
+
+The original local Codex JSONL is canonical evidence and is not duplicated for
+new runs. Legacy schema-v3 transcript copies and schema-v4 receipt-source
+snapshots obey the configured raw retention period; derived manifests,
+validated receipts, metrics, and outcomes remain. Receipt source snapshots are
+private local evidence and must not be uploaded.
+
+All collection and materialization is local, deterministic, network-free, and
+model-free. Do not commit or upload the history archive.
