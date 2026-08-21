@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict'
-import {appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync} from 'node:fs'
+import {appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import test from 'node:test'
+import {parseCodexTranscript} from '../skills/auto-pilot/scripts/history-materialize.mjs'
 import {
   handleHookEvent,
   historyReport,
+  historyGoals,
   historyRuns,
   isAutoPilotInvocation,
   parseAutoPilotInvocation,
+  materializeHistory,
   pruneExpiredRaw,
   setRawRetention,
 } from '../skills/auto-pilot/scripts/history.mjs'
@@ -23,6 +26,10 @@ function tokens(input, cached, output, reasoning, total) {
     reasoning_output_tokens: reasoning,
     total_tokens: total,
   }}}}
+}
+
+function assistantMessage(text) {
+  return {type: 'response_item', payload: {type: 'message', role: 'assistant', content: [{type: 'output_text', text}]}}
 }
 
 function validPrReceipt() {
@@ -58,8 +65,9 @@ test('invocation detection accepts selected or leading skills without matching d
   assert.equal(parseAutoPilotInvocation('$auto-pilot release PR #42').mode, 'release')
   assert.equal(parseAutoPilotInvocation('$auto-pilot release PR #42').continuation, null)
   assert.deepEqual(parseAutoPilotInvocation('$auto-pilot ship docs/plan.md'), {
-    mode: 'pr', continuation: 'release', invocation_source: 'leading_command', explicit_subcommand: 'ship',
+    mode: 'pr', continuation: 'release', invocation_source: 'leading_command', explicit_subcommand: 'ship', goal_id: null,
   })
+  assert.equal(parseAutoPilotInvocation('$auto-pilot pr docs/plan.md <!-- auto-pilot-goal: apg_123456789abc -->').goal_id, 'apg_123456789abc')
   assert.equal(parseAutoPilotInvocation('$auto-pilot pr docs/plan.md --then-release').continuation, 'release')
   assert.equal(parseAutoPilotInvocation('$auto-pilot docs/plan.md. Finish it and release it to production.').continuation, 'release')
   assert.equal(parseAutoPilotInvocation('$auto-pilot docs/plan.md，完成之後直接上線').continuation, 'release')
@@ -78,6 +86,75 @@ test('invocation detection accepts selected or leading skills without matching d
   assert.equal(isAutoPilotInvocation('Can we improve [$auto-pilot](/opt/skills/auto-pilot/SKILL.md) token usage?'), false)
   assert.equal(isAutoPilotInvocation('[$auto-pilot](/opt/skills/auto-pilot/SKILL.md) do not start; only confirm readiness'), false)
   assert.equal(isAutoPilotInvocation('[$auto-pilot](/opt/skills/auto-pilot/SKILL.md) 我想優化這個 skill'), false)
+})
+
+test('post-hoc parser uses last-token increments and survives duplicates and compaction resets', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-parser-'))
+  const transcript = join(root, 'run.jsonl')
+  try {
+    writeFileSync(transcript, jsonl({
+      type: 'event_msg', payload: {type: 'token_count', info: {
+        total_token_usage: {input_tokens: 100, cached_input_tokens: 80, output_tokens: 10},
+        last_token_usage: {input_tokens: 100, cached_input_tokens: 80, output_tokens: 10},
+      }},
+    }))
+    const startBytes = statSync(transcript).size
+    appendFileSync(transcript, jsonl(
+      {type: 'event_msg', payload: {type: 'token_count', info: {
+        total_token_usage: {input_tokens: 110, cached_input_tokens: 85, output_tokens: 12},
+        last_token_usage: {input_tokens: 10, cached_input_tokens: 5, output_tokens: 2},
+      }}},
+      {type: 'event_msg', payload: {type: 'token_count', info: {
+        total_token_usage: {input_tokens: 110, cached_input_tokens: 85, output_tokens: 12},
+        last_token_usage: {input_tokens: 10, cached_input_tokens: 5, output_tokens: 2},
+      }}},
+      {type: 'compacted', payload: {}},
+      {type: 'event_msg', payload: {type: 'token_count', info: {
+        total_token_usage: {input_tokens: 5, cached_input_tokens: 2, output_tokens: 1},
+        last_token_usage: {input_tokens: 5, cached_input_tokens: 2, output_tokens: 1},
+      }}},
+      {type: 'event_msg', payload: {type: 'token_count', info: {
+        total_token_usage: {input_tokens: 0, output_tokens: 0, total_tokens: 99},
+        last_token_usage: {input_tokens: 0, output_tokens: 0, total_tokens: 99},
+      }}},
+    ))
+    const parsed = await parseCodexTranscript(transcript, {startBytes})
+    assert.deepEqual(parsed.token_usage, {
+      input_tokens: 15, cached_input_tokens: 7, cache_write_input_tokens: 0,
+      output_tokens: 3, reasoning_output_tokens: 0, total_tokens: 18,
+    })
+    assert.equal(parsed.compactions, 1)
+    assert.equal(parsed.token_counter_reset, true)
+    assert.equal(parsed.parse_errors, 0)
+  } finally { rmSync(root, {recursive: true, force: true}) }
+})
+
+test('materializer follows a Codex transcript moved to archived_sessions', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-archived-'))
+  const dataRoot = join(root, 'data')
+  const sessions = join(root, '.codex', 'sessions', '2026', '08', '21')
+  const archived = join(root, '.codex', 'archived_sessions')
+  const transcript = join(sessions, 'rollout-test.jsonl')
+  try {
+    mkdirSync(sessions, {recursive: true})
+    mkdirSync(archived, {recursive: true})
+    writeFileSync(transcript, jsonl(tokens(10, 0, 1, 0, 11)))
+    await handleHookEvent({
+      hook_event_name: 'UserPromptSubmit', session_id: 'archived-session', turn_id: 'archived-turn',
+      prompt: '$auto-pilot pr docs/plan.md', transcript_path: transcript,
+    }, {dataRoot})
+    const message = 'No receipt for this parser fixture.'
+    appendFileSync(transcript, jsonl(tokens(20, 0, 2, 0, 22), assistantMessage(message)))
+    await handleHookEvent({
+      hook_event_name: 'Stop', session_id: 'archived-session', turn_id: 'archived-turn',
+      transcript_path: transcript, last_assistant_message: message,
+    }, {dataRoot})
+    renameSync(transcript, join(archived, 'rollout-test.jsonl'))
+    await materializeHistory({dataRoot})
+    const metrics = JSON.parse(readFileSync(join(dataRoot, 'runs', 'archived-session--archived-turn', 'metrics.json'), 'utf8'))
+    assert.equal(metrics.transcript_source_location, 'archived_sibling')
+    assert.equal(metrics.token_usage.total_tokens, 11)
+  } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
 test('hooks archive one complete root and subagent run with deterministic metrics', async () => {
@@ -115,24 +192,30 @@ test('hooks archive one complete root and subagent run with deterministic metric
     }, {dataRoot, now: () => finish})
     const receipt = join(root, 'receipt.json')
     writeFileSync(receipt, JSON.stringify(validPrReceipt()))
-    await handleHookEvent({
-      hook_event_name: 'Stop', session_id: session, turn_id: turn,
-      transcript_path: transcript,
-      last_assistant_message: `Complete.
+    const finalMessage = `Complete.
 ::created-thread{threadId="implementation-task"}
 ::created-thread{threadId="release-task"}
 ${routingMarker(independentImplementation(), {
   lane: 'fresh_release_task', task_ref: 'release-task', worktree: true,
   model: 'gpt-5.6-sol', thinking: 'xhigh', reason: null,
 })}
-<!-- auto-pilot-receipt: ${receipt} -->`,
+<!-- auto-pilot-receipt: ${receipt} -->`
+    appendFileSync(transcript, jsonl(assistantMessage(finalMessage)))
+    await handleHookEvent({
+      hook_event_name: 'Stop', session_id: session, turn_id: turn,
+      transcript_path: transcript,
+      last_assistant_message: finalMessage,
     }, {dataRoot, now: () => finish})
 
     const run = join(dataRoot, 'runs', `${session}--${turn}`)
+    const pending = JSON.parse(readFileSync(join(run, 'manifest.json'), 'utf8'))
+    assert.equal(pending.status, 'pending_materialization')
+    assert.equal(existsSync(join(run, 'metrics.json')), false)
+    await materializeHistory({dataRoot})
     const manifest = JSON.parse(readFileSync(join(run, 'manifest.json'), 'utf8'))
     const metrics = JSON.parse(readFileSync(join(run, 'metrics.json'), 'utf8'))
     assert.equal(manifest.status, 'finished')
-    assert.equal(manifest.schema_version, 3)
+    assert.equal(manifest.schema_version, 4)
     assert.equal(manifest.terminal_state, 'pr_ready')
     assert.equal(manifest.mode, 'pr')
     assert.equal(manifest.continuation, 'release')
@@ -160,16 +243,18 @@ ${routingMarker(independentImplementation(), {
     assert.equal(metrics.routing.status, 'passed')
     assert.equal(metrics.routing.schema_version, 2)
     assert.match(metrics.routing.unverified.join('\n'), /parent-child delegation depth/)
-    assert.equal(readFileSync(join(run, 'transcript.jsonl'), 'utf8'), readFileSync(transcript, 'utf8'))
+    assert.equal(existsSync(join(run, 'transcript.jsonl')), false)
+    assert.equal(existsSync(join(run, 'agents', 'agent-1.marker.json')), true)
     if (process.platform !== 'win32') {
       assert.equal(statSync(run).mode & 0o777, 0o700)
-      assert.equal(statSync(join(run, 'transcript.jsonl')).mode & 0o777, 0o600)
+      assert.equal(statSync(join(run, 'terminal.json')).mode & 0o777, 0o600)
     }
-    assert.equal(historyRuns({dataRoot}).length, 1)
-    assert.equal(historyReport({dataRoot}).total_tokens, 170)
-    assert.equal(historyReport({dataRoot}).benchmark_runs, 1)
-    assert.deepEqual(historyReport({dataRoot}).continuations, {release: 1})
-    assert.deepEqual(historyReport({dataRoot}).orchestration_statuses, {passed: 1})
+    assert.equal((await historyRuns({dataRoot})).length, 1)
+    assert.equal((await historyReport({dataRoot})).total_tokens, 170)
+    assert.equal((await historyReport({dataRoot})).benchmark_runs, 0)
+    assert.deepEqual((await historyReport({dataRoot})).continuations, {release: 1})
+    assert.deepEqual((await historyReport({dataRoot})).orchestration_statuses, {passed: 1})
+    assert.equal((await historyGoals({dataRoot}))[0].lineage_status, 'single_run')
     assert.equal(JSON.parse(readFileSync(join(run, 'outcome.json'), 'utf8')).completion_receipt.status, 'valid')
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
@@ -186,21 +271,24 @@ test('a valid v7 receipt remains valid when routing metadata is missing', async 
       hook_event_name: 'UserPromptSubmit', session_id: 'session-routing-unknown', turn_id: 'turn-routing-unknown',
       prompt: '$auto-pilot pr docs/plan.md', transcript_path: transcript,
     }, {dataRoot, env: {CODEX_AUTO_PILOT_CONFIG: join(root, 'missing-config.json')}})
+    const message = `<!-- auto-pilot-receipt: ${receipt} -->`
+    appendFileSync(transcript, jsonl(assistantMessage(message)))
     await handleHookEvent({
       hook_event_name: 'Stop', session_id: 'session-routing-unknown', turn_id: 'turn-routing-unknown',
-      transcript_path: transcript, last_assistant_message: `<!-- auto-pilot-receipt: ${receipt} -->`,
+      transcript_path: transcript, last_assistant_message: message,
     }, {dataRoot})
+    await materializeHistory({dataRoot})
     const run = join(dataRoot, 'runs', 'session-routing-unknown--turn-routing-unknown')
     const outcome = JSON.parse(readFileSync(join(run, 'outcome.json'), 'utf8'))
     const metrics = JSON.parse(readFileSync(join(run, 'metrics.json'), 'utf8'))
     assert.equal(outcome.completion_receipt.status, 'valid')
     assert.equal(outcome.terminal_state, 'pr_ready')
     assert.equal(metrics.routing.status, 'unknown')
-    assert.equal(historyRuns({dataRoot})[0].orchestration_status, 'unknown')
+    assert.equal((await historyRuns({dataRoot}))[0].orchestration_status, 'unknown')
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
-test('schema-v2 history remains reportable after the v3 routing upgrade', () => {
+test('schema-v2 history remains reportable after the v4 materializer upgrade', async () => {
   const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-history-v2-'))
   const dataRoot = join(root, 'data')
   const run = join(dataRoot, 'runs', 'legacy-session--legacy-turn')
@@ -225,11 +313,44 @@ test('schema-v2 history remains reportable after the v3 routing upgrade', () => 
       subagents: 0,
     }))
     writeFileSync(join(run, 'outcome.json'), JSON.stringify({completion_receipt: {status: 'valid'}}))
-    const runs = historyRuns({dataRoot})
+    const runs = await historyRuns({dataRoot})
     assert.equal(runs.length, 1)
     assert.equal(runs[0].total_tokens, 12)
     assert.equal(runs[0].orchestration_status, 'legacy_unobserved')
-    assert.deepEqual(historyReport({dataRoot}).orchestration_statuses, {legacy_unobserved: 1})
+    assert.deepEqual((await historyReport({dataRoot})).orchestration_statuses, {legacy_unobserved: 1})
+  } finally { rmSync(root, {recursive: true, force: true}) }
+})
+
+test('goal aggregation links only two-sided fresh-stage breadcrumbs', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-goals-'))
+  const dataRoot = join(root, 'data')
+  const goalId = 'apg_123456789abc'
+  try {
+    for (const [index, source] of ['routing_marker', 'invocation_marker'].entries()) {
+      const runId = `session-${index}--turn-${index}`
+      const run = join(dataRoot, 'runs', runId)
+      mkdirSync(run, {recursive: true})
+      writeFileSync(join(run, 'manifest.json'), JSON.stringify({
+        schema_version: 4, run_id: runId, status: 'finished',
+        started_at: `2026-08-01T00:0${index}:00.000Z`,
+        ended_at: `2026-08-01T00:0${index + 1}:00.000Z`,
+        goal_id: goalId, goal_id_source: source, goal_id_sources: [source],
+        terminal_state: 'pr_ready', mode: 'pr',
+      }))
+      writeFileSync(join(run, 'metrics.json'), JSON.stringify({
+        duration_ms: 60000, token_usage_observed: true, collection_complete: true,
+        token_usage: {total_tokens: 100 + index, cached_input_tokens: 10},
+        tool_calls: 2, compactions: index, subagents: 0,
+        topology: {max_observed_depth: 0}, routing: {status: 'passed'},
+      }))
+      writeFileSync(join(run, 'outcome.json'), JSON.stringify({completion_receipt: {status: 'valid'}}))
+    }
+    const goals = await historyGoals({dataRoot})
+    assert.equal(goals.length, 1)
+    assert.equal(goals[0].lineage_status, 'linked')
+    assert.equal(goals[0].total_tokens, 201)
+    assert.equal(goals[0].active_duration_ms, 120000)
+    assert.equal(goals[0].benchmark_eligible, true)
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
@@ -248,10 +369,11 @@ test('session end recovers an unfinished invocation and retention removes only r
     appendFileSync(transcript, jsonl(tokens(30, 0, 3, 0, 33)))
     await handleHookEvent({hook_event_name: 'SessionEnd', session_id: 'session-2', transcript_path: transcript}, {dataRoot, now: () => finish})
     const run = join(dataRoot, 'runs', 'session-2--turn-2')
+    await materializeHistory({dataRoot, now: () => finish})
     assert.equal(JSON.parse(readFileSync(join(run, 'outcome.json'), 'utf8')).collection_reason, 'session_end')
     setRawRetention(1, dataRoot)
     const result = pruneExpiredRaw(dataRoot, new Date('2026-01-03T00:00:00.000Z'))
-    assert.deepEqual(result, {pruned_runs: 1, pruned_files: 1})
+    assert.deepEqual(result, {pruned_runs: 1, pruned_files: 0})
     assert.equal(readFileSync(join(run, 'metrics.json'), 'utf8').includes('total_tokens'), true)
     assert.equal(JSON.parse(readFileSync(join(run, 'manifest.json'), 'utf8')).raw_pruned_at, '2026-01-03T00:00:00.000Z')
   } finally { rmSync(root, {recursive: true, force: true}) }
@@ -267,14 +389,17 @@ test('final-message keywords cannot create a verified terminal state', async () 
       hook_event_name: 'UserPromptSubmit', session_id: 'session-keywords', turn_id: 'turn-keywords',
       prompt: '$auto-pilot release PR #42', transcript_path: transcript,
     }, {dataRoot})
+    const message = 'Discussion only: released, pr_ready, blocked.'
+    appendFileSync(transcript, jsonl(assistantMessage(message)))
     await handleHookEvent({
       hook_event_name: 'Stop', session_id: 'session-keywords', turn_id: 'turn-keywords',
-      transcript_path: transcript, last_assistant_message: 'Discussion only: released, pr_ready, blocked.',
+      transcript_path: transcript, last_assistant_message: message,
     }, {dataRoot})
     const run = join(dataRoot, 'runs', 'session-keywords--turn-keywords')
+    await materializeHistory({dataRoot})
     assert.equal(JSON.parse(readFileSync(join(run, 'manifest.json'), 'utf8')).terminal_state, 'unknown')
     assert.equal(JSON.parse(readFileSync(join(run, 'outcome.json'), 'utf8')).completion_receipt.status, 'missing')
-    assert.equal(historyReport({dataRoot}).benchmark_runs, 0)
+    assert.equal((await historyReport({dataRoot})).benchmark_runs, 0)
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
@@ -290,11 +415,14 @@ test('receipt mode must match the invocation stage', async () => {
       hook_event_name: 'UserPromptSubmit', session_id: 'session-mode', turn_id: 'turn-mode',
       prompt: '$auto-pilot release PR #42', transcript_path: transcript,
     }, {dataRoot})
+    const message = `<!-- auto-pilot-receipt: ${receipt} -->`
+    appendFileSync(transcript, jsonl(assistantMessage(message)))
     await handleHookEvent({
       hook_event_name: 'Stop', session_id: 'session-mode', turn_id: 'turn-mode',
-      transcript_path: transcript, last_assistant_message: `<!-- auto-pilot-receipt: ${receipt} -->`,
+      transcript_path: transcript, last_assistant_message: message,
     }, {dataRoot})
     const run = join(dataRoot, 'runs', 'session-mode--turn-mode')
+    await materializeHistory({dataRoot})
     assert.equal(JSON.parse(readFileSync(join(run, 'manifest.json'), 'utf8')).terminal_state, 'unknown')
     assert.equal(JSON.parse(readFileSync(join(run, 'outcome.json'), 'utf8')).completion_receipt.status, 'mode_mismatch')
     assert.equal(existsSync(join(run, 'receipt.json')), false)
@@ -313,10 +441,13 @@ test('history rejects a shallow receipt that bypasses the full validator', async
       hook_event_name: 'UserPromptSubmit', session_id: 'session-shallow', turn_id: 'turn-shallow',
       prompt: '$auto-pilot pr docs/plan.md', transcript_path: transcript,
     }, {dataRoot})
+    const message = `<!-- auto-pilot-receipt: ${receipt} -->`
+    appendFileSync(transcript, jsonl(assistantMessage(message)))
     await handleHookEvent({
       hook_event_name: 'Stop', session_id: 'session-shallow', turn_id: 'turn-shallow',
-      transcript_path: transcript, last_assistant_message: `<!-- auto-pilot-receipt: ${receipt} -->`,
+      transcript_path: transcript, last_assistant_message: message,
     }, {dataRoot})
+    await materializeHistory({dataRoot})
     const outcome = JSON.parse(
       readFileSync(join(dataRoot, 'runs', 'session-shallow--turn-shallow', 'outcome.json'), 'utf8'),
     )

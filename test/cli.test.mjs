@@ -12,7 +12,7 @@ function run(args, env = {}) {
 }
 
 test('version, help, and skill-path are available without installation', () => {
-  assert.equal(run(['--version']).stdout.trim(), '0.10.0')
+  assert.equal(run(['--version']).stdout.trim(), '0.11.0')
   assert.match(run(['help']).stdout, /install \[--dry-run\] \[--force\] \[--with-local-history\]/)
   assert.match(run(['help']).stdout, /passive user-level Codex hooks/)
   assert.match(run(['skill-path']).stdout.trim(), /skills\/auto-pilot$/)
@@ -47,6 +47,8 @@ test('history status and retention use an isolated local data directory', () => 
     assert.equal(initial.retention, 90)
     const updated = JSON.parse(run(['history', 'retention', '30'], env).stdout)
     assert.equal(updated.raw_retention_days, 30)
+    assert.equal(JSON.parse(run(['history', 'materialize'], env).stdout).materialized, 0)
+    assert.deepEqual(JSON.parse(run(['history', 'goals'], env).stdout), [])
     assert.equal(JSON.parse(run(['history', 'report', '--since', '30d'], env).stdout).runs, 0)
   } finally { rmSync(data, {recursive: true, force: true}) }
 })

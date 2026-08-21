@@ -8,7 +8,7 @@ $auto-pilot ship docs/approved-plan.md
 $auto-pilot release https://github.com/owner/repo/pull/123
 ```
 
-Auto Pilot v0.10.0 keeps one accountable Sol owner in control without forcing an agent team or fresh implementation task. The owner may finish the goal in its current session, or independently choose fresh owner stages and leaf workers when context separation or parallelism materially helps. Reference preferences are `gpt-5.6-sol` with `xhigh` thinking for owner stages and `gpt-5.6-luna` with `max` for optional leaves. These are configurable examples, not delivery evidence or authority.
+Auto Pilot v0.11.0 keeps one accountable Sol owner in control without forcing an agent team or fresh implementation task. The owner may finish the goal in its current session, or independently choose fresh owner stages and leaf workers when context separation or parallelism materially helps. Reference preferences are `gpt-5.6-sol` with `xhigh` thinking for owner stages and `gpt-5.6-luna` with `max` for optional leaves. These are configurable examples, not delivery evidence or authority.
 
 ## What it does
 
@@ -162,24 +162,26 @@ force-removes a worktree; an unsafe or failed cleanup makes the run `blocked`.
 
 ## Local run history
 
-The plugin bundles an optional, local-only collector. After its hooks are trusted, every leading execution-form `$auto-pilot` invocation is captured automatically; inline discussions and optimization questions are ignored. Manifests distinguish PR-only, automatic release continuation, and direct release runs:
+The plugin bundles an optional, local-only collector. After its hooks are trusted, every leading execution-form `$auto-pilot` invocation is captured automatically; inline discussions and optimization questions are ignored. Hooks now write only thin lifecycle bookmarks:
 
-1. `UserPromptSubmit` records the invocation and baseline token totals.
-2. `SubagentStop` archives each subagent transcript when one exists.
-3. `Stop` archives the root transcript and computes deterministic run metrics.
-4. `SessionEnd` recovers a run that ended without a normal turn stop.
+1. `UserPromptSubmit` records the invocation boundary, source offset, and exact skill/config identity.
+2. `SubagentStop` records the agent identity and source path/size without copying or parsing it.
+3. `Stop` records the terminal boundary, final-message hash, and a small receipt-source snapshot when present.
+4. `SessionEnd` records a recovery boundary for an unfinished invocation.
 
-Collection uses local Node.js scripts and returns empty hook context. It does not call a model, add orchestration, or upload data. Raw transcripts default to 90-day retention while manifests and aggregate metrics remain available. A private routing audit records passed, fallback, deviation, or unknown separately from the receipt-backed delivery outcome; it does not make a delivery receipt pass or fail.
+Heavy transcript parsing, hashing, token accounting, topology reconstruction, routing audit, and receipt validation run post-hoc with `history materialize`; `list`, `goals`, and `report` materialize pending runs automatically. The original Codex JSONL stays canonical and is not duplicated for new runs. Collection returns empty hook context, calls no model, adds no orchestration, and uploads nothing. Missing or changed source evidence stays unknown instead of becoming a false zero.
 
 ```bash
 codex-auto-pilot history status
+codex-auto-pilot history materialize
 codex-auto-pilot history list --since 30d
+codex-auto-pilot history goals --since 30d
 codex-auto-pilot history report --since 30d
 codex-auto-pilot history retention 30
 codex-auto-pilot history retention forever
 ```
 
-The archive lives at `~/.codex-auto-pilot/history` by default. Override it with `CODEX_AUTO_PILOT_DATA`. See the [history schema](skills/auto-pilot/references/history-schema.md) and the [OSS observability research](https://github.com/tombelieber/codex-auto-pilot/blob/main/docs/research/oss-agent-eval-observability.md).
+The archive lives at `~/.codex-auto-pilot/history` by default. Override it with `CODEX_AUTO_PILOT_DATA`. See the [history schema](skills/auto-pilot/references/history-schema.md), the [OSS observability research](https://github.com/tombelieber/codex-auto-pilot/blob/main/docs/research/oss-agent-eval-observability.md), and the [Tokscale parser audit](https://github.com/tombelieber/codex-auto-pilot/blob/main/docs/research/tokscale-session-analysis.md).
 
 ## Is this topology optimal?
 
@@ -193,13 +195,13 @@ Verify it from receipt-backed local history rather than intuition:
 4. Reject a cheaper topology if it increases escaped defects, incomplete scope, repeated repair loops, or unsafe release outcomes.
 5. Promote a routing change only after several comparable successful runs show a repeatable improvement; never infer causality from one unusually small task.
 
-The collector's benchmark cohort excludes legacy or unverified outcomes. Independent user-visible owner stages are not automatically attributable to the parent PR run in every Codex runtime, so a root-only token total must not be presented as the complete cost of a staged PR. Use explicit linked session evidence before making that comparison.
+The collector's benchmark cohort excludes legacy or unverified outcomes. Fresh user-visible owner stages are grouped only when the dispatching routing marker and receiving invocation share the same opaque goal ID. Collaboration-agent tokens remain separate and unverified in schema v4 because child JSONL may replay parent history; those runs stay outside token-cost cohorts until semantic replay deduplication is proven.
 
 ## Privacy and safety
 
 - No remote telemetry is collected.
 - Local run history is enabled only by trusting the plugin hooks or using `install --with-local-history`.
-- Full transcripts may contain prompts, source code, tool output, credentials, personal data, and private paths. The archive is private local data and must never be committed or uploaded without review and redaction.
+- Referenced local transcripts may contain prompts, source code, tool output, credentials, personal data, and private paths. New history runs do not duplicate them, but both the Codex session store and the private marker archive must never be committed or uploaded without review and redaction.
 - No plan, code, or repository data is uploaded by this project.
 - No credentials are bundled; normal local and repository authentication applies.
 - The public GitHub handle `tombelieber` is intentionally present.
@@ -213,7 +215,7 @@ The collector's benchmark cohort excludes legacy or unverified outcomes. Indepen
 - Auto Pilot does not invent a deployment, migration, backfill, or rollback mechanism when the repository has none.
 - Model and tool availability depend on the active Codex runtime.
 - Automatic `ship` requires the runtime to create a separate task. If unavailable, Auto Pilot returns the exact manual `release` command and never falls back to same-session production mutation.
-- Codex transcript JSONL is not a stable public schema. The collector preserves the original file and versions its derived metrics so future parsers can reprocess the evidence.
+- Codex transcript JSONL is not a stable public schema. The collector references the original local file and independently versions marker, parser, and materializer schemas so available evidence can be rebuilt.
 
 ## Contributing and security
 

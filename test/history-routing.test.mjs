@@ -187,4 +187,8 @@ test('missing or malformed markers remain operational unknown or deviation, neve
   assert.equal(auditRouting({message: duplicate, manifest: manifest()}).status, 'deviation')
   assert.equal(parseRoutingMarker(duplicate).status, 'invalid')
   assert.equal(parseRoutingMarker('Completed.').status, 'missing')
+  const invalidGoal = `<!-- auto-pilot-routing: ${JSON.stringify({
+    goal_id: 'human-readable-project-name', implementation: independentTask(), continuation: notRequested(),
+  })} -->`
+  assert.match(auditRouting({message: invalidGoal, manifest: manifest()}).deviations.join('\n'), /opaque apg_/)
 })

@@ -62,6 +62,13 @@ choose a fresh review stage when a clean context materially helps.
 When the owner chooses a fresh stage, bind it to the approved artifact and real
 Git state. Provide only the information needed to continue:
 
+Generate one opaque goal ID at the first fresh-stage boundary with
+`node <skill-dir>/scripts/new_goal_id.mjs`. Put
+`<!-- auto-pilot-goal: <ID> -->` in the receiving Auto Pilot prompt and the
+same `goal_id` in the dispatching owner's final routing marker. Reuse that ID
+across later fresh stages. This breadcrumb exists only to join local lifecycle
+records; it carries no hidden reasoning and does not add hook context.
+
 1. approved artifact and relevant repository instructions;
 2. repository path, base SHA, owned branch or worktree, and bounded scope;
 3. current completed and remaining outcomes;

@@ -11,6 +11,7 @@ const intended = [
   'skills/auto-pilot/references/release-promotion.md', 'skills/auto-pilot/scripts/collect_history.mjs',
   'skills/auto-pilot/scripts/resolve_config.mjs', 'skills/auto-pilot/scripts/history-routing.mjs',
   'skills/auto-pilot/scripts/history.mjs', 'skills/auto-pilot/scripts/history-bundle.mjs',
+  'skills/auto-pilot/scripts/history-materialize.mjs', 'skills/auto-pilot/scripts/new_goal_id.mjs',
   'skills/auto-pilot/scripts/history-receipt.mjs', 'skills/auto-pilot/scripts/validate_receipt.py',
 ].sort()
 
