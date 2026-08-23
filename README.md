@@ -1,5 +1,11 @@
 # codex-auto-pilot
 
+> [!IMPORTANT]
+> **The maintained `auto-pilot` skill now lives in
+> [Tomstack](https://github.com/tombelieber/tomstack/tree/main/skills/engineering/auto-pilot).**
+> Install and update the reusable skill from Tomstack. This repository remains
+> the supported home of the Codex plugin, CLI, hooks, run history, and releases.
+
 Turn one approved software goal, plan, or design spec into a production-ready pull request, then promote that exact candidate in a separately authorized release session.
 
 ```text
@@ -72,6 +78,15 @@ into release: it creates one fresh task for a PR head, or reuses the exact
 existing continuation task for that same head.
 
 ## Install
+
+### Maintained skill only (Codex, Claude Code, and other agents)
+
+```bash
+npx skills@latest add tombelieber/tomstack --skill=auto-pilot
+```
+
+This is the canonical reusable skill. Use the standalone plugin below when you
+also need Codex hooks, local run history, and the packaged CLI.
 
 ### Codex plugin
 
