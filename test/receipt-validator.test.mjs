@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import {execFileSync} from 'node:child_process'
+import {createHash} from 'node:crypto'
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join, resolve} from 'node:path'
@@ -7,6 +8,7 @@ import test from 'node:test'
 import {fileURLToPath} from 'node:url'
 
 const validator = resolve(fileURLToPath(new URL('../skills/auto-pilot/scripts/validate_receipt.py', import.meta.url)))
+const contractSha = execFileSync('python3', [validator, '--contract-sha256'], {encoding: 'utf8'}).trim()
 const headSha = 'a'.repeat(40)
 const baseSha = 'b'.repeat(40)
 const mergeSha = 'c'.repeat(40)
@@ -42,12 +44,32 @@ function receipt(state = 'pr_ready') {
   }
   if (merged) {
     value.promotion = {
-      source: 'live_pr',
-      source_receipt: null,
+      source: 'pr_ready_receipt',
+      source_receipt: '__SOURCE_RECEIPT__',
       candidate_base_sha: baseSha,
       candidate_head_sha: headSha,
       authority_evidence: 'Explicit current invocation: $auto-pilot release PR #1',
     }
+    value.checks.push({
+      name: 'release-contract-binding',
+      status: 'passed',
+      contract_sha256: contractSha,
+      source_receipt_sha256: '__SOURCE_SHA__',
+      candidate_head_sha: headSha,
+      single_use: true,
+      evidence: 'Recomputed before mutation from the installed contract and exact source receipt',
+    })
+    value.checks.push({
+      name: 'release-control-budget',
+      status: 'passed',
+      budget_seconds: 600,
+      live_pr_bound_at: '2026-08-28T09:00:00+08:00',
+      ended_at: '2026-08-28T09:08:30+08:00',
+      end_kind: 'terminal',
+      elapsed_seconds: 510,
+      outcome: 'passed',
+      evidence: 'Measured from live PR binding through the complete release task',
+    })
     value.cleanup = {
       status: 'passed',
       worktree: 'removed',
@@ -80,10 +102,19 @@ function receipt(state = 'pr_ready') {
   return value
 }
 
-function run(value) {
+function run(value, sourceValue = receipt()) {
   const directory = mkdtempSync(join(tmpdir(), 'receipt-validator-'))
   const file = join(directory, 'receipt.json')
   try {
+    if (value.promotion?.source_receipt === '__SOURCE_RECEIPT__') {
+      const sourceReceipt = join(directory, 'pr-ready-receipt.json')
+      const sourceBytes = JSON.stringify(sourceValue)
+      writeFileSync(sourceReceipt, sourceBytes)
+      value.promotion.source_receipt = sourceReceipt
+      const sourceSha = createHash('sha256').update(sourceBytes).digest('hex')
+      const binding = value.checks?.find(check => check.name === 'release-contract-binding')
+      if (binding?.source_receipt_sha256 === '__SOURCE_SHA__') binding.source_receipt_sha256 = sourceSha
+    }
     writeFileSync(file, JSON.stringify(value))
     return {status: 0, output: execFileSync('python3', [validator, file], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']})}
   } catch (error) {
@@ -92,6 +123,10 @@ function run(value) {
     rmSync(directory, {recursive: true, force: true})
   }
 }
+
+test('prints the current release-contract SHA-256', () => {
+  assert.match(contractSha, /^[0-9a-f]{64}$/)
+})
 
 for (const state of ['pr_ready', 'merged_main', 'released']) {
   test(`accepts a valid ${state} receipt without orchestration metadata`, () => {
@@ -139,6 +174,75 @@ test('rejects release without fresh promotion evidence', () => {
   const value = receipt('released')
   delete value.promotion
   assert.equal(run(value).status, 1)
+})
+
+test('rejects successful release sourced only from the live PR', () => {
+  const value = receipt('released')
+  value.promotion.source = 'live_pr'
+  value.promotion.source_receipt = null
+  value.checks.find(check => check.name === 'release-contract-binding').source_receipt_sha256 = null
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects release without the current contract binding', () => {
+  const value = receipt('released')
+  value.checks = value.checks.filter(check => check.name !== 'release-contract-binding')
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects a stale installed release-contract fingerprint', () => {
+  const value = receipt('released')
+  value.checks.find(check => check.name === 'release-contract-binding').contract_sha256 = 'd'.repeat(64)
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects a source receipt digest mismatch', () => {
+  const value = receipt('released')
+  value.checks.find(check => check.name === 'release-contract-binding').source_receipt_sha256 = 'd'.repeat(64)
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects a relative source receipt path', () => {
+  const value = receipt('released')
+  value.promotion.source_receipt = 'pr-ready-receipt.json'
+  value.checks.find(check => check.name === 'release-contract-binding').source_receipt_sha256 = 'd'.repeat(64)
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects a source receipt that does not itself validate', () => {
+  const value = receipt('released')
+  const sourceValue = receipt()
+  sourceValue.plan.approved = false
+  assert.equal(run(value, sourceValue).status, 1)
+})
+
+test('rejects a contract binding for another candidate', () => {
+  const value = receipt('released')
+  value.checks.find(check => check.name === 'release-contract-binding').candidate_head_sha = 'd'.repeat(40)
+  assert.equal(run(value).status, 1)
+})
+
+test('rejects a successful release that exceeds its whole-task budget', () => {
+  const value = receipt('released')
+  const budget = value.checks.find(check => check.name === 'release-control-budget')
+  budget.status = 'failed'
+  budget.ended_at = '2026-08-28T09:11:00+08:00'
+  budget.elapsed_seconds = 660
+  budget.outcome = 'exhausted'
+  assert.equal(run(value).status, 1)
+})
+
+test('accepts an exhausted budget only as a blocked release result', () => {
+  const value = receipt('released')
+  value.terminal_state = 'blocked'
+  value.blockers = [{reason: 'release-control budget exhausted', evidence: 'Reached the repository-defined safe boundary'}]
+  const budget = value.checks.find(check => check.name === 'release-control-budget')
+  budget.status = 'failed'
+  budget.ended_at = '2026-08-28T09:11:00+08:00'
+  budget.end_kind = 'safe_boundary'
+  budget.elapsed_seconds = 660
+  budget.outcome = 'exhausted'
+  assert.equal(run(value).status, 0)
 })
 
 test('rejects merged completion without automatic worktree cleanup evidence', () => {

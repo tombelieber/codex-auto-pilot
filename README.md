@@ -74,8 +74,9 @@ Fresh-stage handoffs contain the approved goal, Git identities, completed and
 remaining outcomes, changed paths, check evidence, risks, and blockers—not
 copied conversation history or hidden reasoning. A continuation stage is a new
 owner stage, not a failure. `ship` likewise does not carry the PR conversation
-into release: it creates one fresh task for a PR head, or reuses the exact
-existing continuation task for that same head.
+into release: it creates one fresh single-use task for a qualified PR head. If
+that exact attempt is already active, it is identified without another prompt;
+a terminal release task is never resumed.
 
 ## Install
 
@@ -156,7 +157,7 @@ Ship mode is the one-command PR-to-production lane:
 $auto-pilot ship docs/approved-plan.md
 ```
 
-An equally clear current instruction such as “finish this and release it” may be normalized to `ship`. Auto Pilot still completes the PR stage first. Once the PR is ready, it creates one fresh release task for that PR head, or reuses its exact existing continuation, then ends the PR controller. Questions, hypotheticals, future wishes, quoted examples, prior-chat intent, and negated release requests never select this mode.
+An equally clear current instruction such as “finish this and release it” may be normalized to `ship`. Auto Pilot still completes the PR stage first. Readiness requires promotable PASS exact-candidate evidence and current required CI for the live head. It then creates one fresh single-use release task, binds the task to the live head plus source-receipt and installed-contract SHA-256 values, and ends the PR controller. An already-active exact attempt is not prompted twice; a terminal one is never resumed. Questions, hypotheticals, future wishes, quoted examples, prior-chat intent, and negated release requests never select this mode.
 
 Release mode requires a new explicit invocation that identifies an existing PR:
 
@@ -164,9 +165,9 @@ Release mode requires a new explicit invocation that identifies an existing PR:
 $auto-pilot release https://github.com/owner/repo/pull/123
 ```
 
-It starts from the live candidate, merges through the repository's normal protected path, uses the discovered release mechanism, handles approved migrations or backfills, and verifies each affected capability through its exact production actor, credential, scope, runtime principal, representative data, and terminal outcome. It then publishes canonical release notes and ends every `released` response with a compact release message linked to them. Live canaries are release-only and impact-selected; they are never run on every edit or commit. If the repository has no release mechanism, it stops after merging. A PR-stage conversation or receipt is evidence, never release authority.
+It starts from the live candidate and validates one bounded admission packet before merge. The release task treats that candidate as immutable: it cannot edit source, create a commit or branch, open another PR, or repair CI/release tooling. Unless the user or repository declares another bound before promotion, the whole release-control task has a 10-minute wall-clock budget from live-PR binding; an unsafe in-flight mutation still reaches its next repository-defined safe boundary. It merges through the repository's normal protected path, uses the discovered release mechanism, handles approved migrations or backfills, and verifies each affected capability through its exact production actor, credential, scope, runtime principal, representative data, and terminal outcome. It then publishes canonical release notes and ends every `released` response with a compact release message linked to them. Live canaries are release-only and impact-selected; they are never run on every edit or commit. If the repository has no release mechanism, it stops after merging. A validated `pr_ready` receipt is required evidence, never release authority by itself.
 
-Each session reports one terminal state: the PR controller reports `pr_ready` or `blocked`; the fresh release controller reports `merged_main`, `released`, or `blocked`. Its completion receipt records plan, Git, criteria, checks, PR/release evidence, exact release capability reachability, and blockers without copying model reasoning. A successful deployment with missing reachability proof remains `blocked`, not `released`.
+Each session reports one terminal state: the PR controller reports `pr_ready` or `blocked`; the fresh release controller reports `merged_main`, `released`, or `blocked`. Any terminal release result permanently seals that task against later production mutation. Its completion receipt records plan, Git, criteria, checks, PR/release evidence, exact release capability reachability, contract/source bindings, complete-task timing, and blockers without copying model reasoning. A successful deployment with missing reachability proof remains `blocked`, not `released`.
 
 After a successful merge or release, Auto Pilot automatically closes the
 task-owned local workspace: it verifies the worktree is clean, unlocked,
