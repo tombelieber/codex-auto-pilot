@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict'
+import {execFileSync} from 'node:child_process'
+import {createHash} from 'node:crypto'
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
-import {join} from 'node:path'
+import {join, resolve} from 'node:path'
 import test from 'node:test'
+import {fileURLToPath} from 'node:url'
 import {collectCompletionReceipt} from '../skills/auto-pilot/scripts/history-receipt.mjs'
 
+const validator = resolve(fileURLToPath(new URL('../skills/auto-pilot/scripts/validate_receipt.py', import.meta.url)))
+const contractSha = execFileSync('python3', [validator, '--contract-sha256'], {encoding: 'utf8'}).trim()
 const headSha = 'a'.repeat(40)
 const baseSha = 'b'.repeat(40)
 const mergeSha = 'c'.repeat(40)
@@ -18,7 +23,23 @@ const releaseMessage = `### Release
 - Distribution: GitHub Release complete.
 - Release notes: [v1](${notesUrl})`
 
-function releasedReceipt() {
+function prReadyReceipt() {
+  return {
+    schema_version: 7,
+    mode: 'pr',
+    terminal_state: 'pr_ready',
+    plan: {source: 'docs/plan.md', approved: true},
+    summary: 'Implemented and verified the approved plan.',
+    git: {base_branch: 'main', delivery_branch: 'feature/test', commits: [headSha]},
+    criteria: [{id: 'AC-1', status: 'passed', evidence: 'Exact acceptance path passed'}],
+    checks: [{name: 'exact-candidate', status: 'passed', evidence: 'Promotable exact-candidate PASS for the live head'}],
+    pull_request: {url: 'https://github.com/owner/repo/pull/1', status: 'open', merged: false, merge_sha: null},
+    release: {status: 'not_requested', url: null, notes_url: null, message: null, evidence: 'PR stage; production was not changed'},
+    blockers: [],
+  }
+}
+
+function releasedReceipt(sourceReceipt, sourceReceiptSha) {
   return {
     schema_version: 7,
     mode: 'release',
@@ -27,14 +48,36 @@ function releasedReceipt() {
     summary: 'Released and verified the approved plan.',
     git: {base_branch: 'main', delivery_branch: 'feature/test', commits: [headSha]},
     criteria: [{id: 'AC-1', status: 'passed', evidence: 'Exact acceptance path passed'}],
-    checks: [{name: 'post-release E2E', status: 'passed', evidence: 'Production canary artifact'}],
+    checks: [
+      {name: 'post-release E2E', status: 'passed', evidence: 'Production canary artifact'},
+      {
+        name: 'release-contract-binding',
+        status: 'passed',
+        contract_sha256: contractSha,
+        source_receipt_sha256: sourceReceiptSha,
+        candidate_head_sha: headSha,
+        single_use: true,
+        evidence: 'Recomputed before mutation from the installed contract and exact source receipt',
+      },
+      {
+        name: 'release-control-budget',
+        status: 'passed',
+        budget_seconds: 600,
+        live_pr_bound_at: '2026-08-28T09:00:00+08:00',
+        ended_at: '2026-08-28T09:08:30+08:00',
+        end_kind: 'terminal',
+        elapsed_seconds: 510,
+        outcome: 'passed',
+        evidence: 'Measured from live PR binding through the complete release task',
+      },
+    ],
     pull_request: {url: 'https://github.com/owner/repo/pull/1', status: 'merged', merged: true, merge_sha: mergeSha},
     release: {
       status: 'passed', url: notesUrl, notes_url: notesUrl, message: releaseMessage,
       evidence: 'Production deployment and post-release E2E passed',
     },
     promotion: {
-      source: 'live_pr', source_receipt: null, candidate_base_sha: baseSha,
+      source: 'pr_ready_receipt', source_receipt: sourceReceipt, candidate_base_sha: baseSha,
       candidate_head_sha: headSha,
       authority_evidence: 'Explicit current invocation: $auto-pilot release PR #1',
     },
@@ -70,8 +113,12 @@ function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'history-receipt-'))
   const archive = join(root, 'archive')
   const receipt = join(root, 'receipt.json')
+  const sourceReceipt = join(root, 'pr-ready-receipt.json')
   mkdirSync(archive)
-  writeFileSync(receipt, JSON.stringify(releasedReceipt()))
+  const sourceBytes = JSON.stringify(prReadyReceipt())
+  writeFileSync(sourceReceipt, sourceBytes)
+  const sourceReceiptSha = createHash('sha256').update(sourceBytes).digest('hex')
+  writeFileSync(receipt, JSON.stringify(releasedReceipt(sourceReceipt, sourceReceiptSha)))
   return {root, archive, receipt}
 }
 
