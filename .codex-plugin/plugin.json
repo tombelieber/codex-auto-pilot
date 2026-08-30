@@ -1,7 +1,7 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.11.0",
-  "description": "Deliver approved plans through verified PR and release stages with canonical release notes.",
+  "version": "0.13.0",
+  "description": "Deliver approved goals to fully release-ready PRs or verified production with zero scoped leftovers.",
   "author": { "name": "tombelieber", "url": "https://github.com/tombelieber" },
   "homepage": "https://github.com/tombelieber/codex-auto-pilot",
   "repository": "https://github.com/tombelieber/codex-auto-pilot",
@@ -11,13 +11,13 @@
   "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Codex Auto Pilot",
-    "shortDescription": "Build a verified PR and close releases with notes",
-    "longDescription": "Keeps one accountable Sol owner in control, lets that owner finish directly or choose optional fresh stages and terminal leaf workers, and preserves a separate production-authority boundary. Released runs require canonical notes and a final linked release message; merged task worktrees are removed automatically only after fail-closed safety checks.",
+    "shortDescription": "Reach PR_READY or SHIPPED in one task",
+    "longDescription": "Keeps the invoking task accountable and resumable until either an open candidate is fully production-release-ready or the exact candidate is proven live in production with zero scoped leftovers. Release, promote, and deploy normalize to ship; blockers remain resumable checkpoints.",
     "developerName": "tombelieber",
     "category": "Productivity",
     "capabilities": ["Write", "Git", "Release"],
     "websiteURL": "https://github.com/tombelieber/codex-auto-pilot",
-    "defaultPrompt": ["$auto-pilot pr <approved-plan-path>. Use ship instead when I explicitly want Auto Pilot to create a fresh release task immediately after the PR becomes ready."],
+    "defaultPrompt": ["$auto-pilot pr <approved-plan-path>. Use ship for complete production delivery. Keep this task accountable through waits and repairs; succeed only as PR_READY or SHIPPED with zero scoped leftovers."],
     "brandColor": "#2563EB"
   }
 }

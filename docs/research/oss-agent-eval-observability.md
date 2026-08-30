@@ -6,7 +6,7 @@ _Checked 2026-08-04 against first-party documentation and repositories._
 
 Keep a **thin, local-first Auto Pilot collector as the canonical record**, then add an **OTLP/OpenInference export adapter**. Do not make a tracing platform a required runtime dependency yet.
 
-The mature projects solve trace storage, search, dashboards, datasets, and evaluators. None of them currently identifies a `$auto-pilot` invocation, clones the original Codex transcript, understands Auto Pilot's `pr_ready` / `merged_main` / `released` contract, or proves Git/PR/release outcomes without an Auto Pilot-specific adapter. Codex already emits opt-in OpenTelemetry logs and metrics for API, token, turn, hook, and tool activity, but its documented export is not a lossless replacement for the persisted session transcript.[^codex-otel]
+The mature projects solve trace storage, search, dashboards, datasets, and evaluators. None of them currently identifies a `$auto-pilot` invocation, clones the original Codex transcript, understands Auto Pilot's achieved `PR_READY` / `SHIPPED` outcomes plus resumable incomplete attempts, or proves Git/PR/production outcomes without an Auto Pilot-specific adapter. Codex already emits opt-in OpenTelemetry logs and metrics for API, token, turn, hook, and tool activity, but its documented export is not a lossless replacement for the persisted session transcript.[^codex-otel]
 
 Recommended boundary:
 
@@ -30,7 +30,7 @@ Recommended boundary:
 
 Adopt three proven ideas, without adopting a server:
 
-- **OTLP-compatible normalized events** for portability. Use stable custom attributes such as `skill.name`, `skill.version`, `skill.invocation_id`, `delivery.mode`, and `delivery.terminal_state`; version the mapping because GenAI conventions continue to evolve.
+- **OTLP-compatible normalized events** for portability. Use stable custom attributes such as `skill.name`, `skill.version`, `skill.invocation_id`, `goal.mode`, `goal.outcome`, and `attempt.result`; version the mapping because GenAI conventions continue to evolve.
 - **OpenInference-style hierarchy**: one invocation trace, child spans for model/tool/subagent phases, plus explicit token usage and cached/reasoning breakdowns.
 - **Evaluation separation**: deterministic collection on every invocation; scheduled cohort analysis and judge scoring only after enough comparable runs exist.
 

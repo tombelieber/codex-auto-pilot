@@ -12,7 +12,7 @@ function run(args, env = {}) {
 }
 
 test('version, help, and skill-path are available without installation', () => {
-  assert.equal(run(['--version']).stdout.trim(), '0.11.0')
+  assert.equal(run(['--version']).stdout.trim(), '0.13.0')
   assert.match(run(['help']).stdout, /install \[--dry-run\] \[--force\] \[--with-local-history\]/)
   assert.match(run(['help']).stdout, /passive user-level Codex hooks/)
   assert.match(run(['skill-path']).stdout.trim(), /skills\/auto-pilot$/)

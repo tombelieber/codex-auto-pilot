@@ -1,242 +1,186 @@
-# codex-auto-pilot
+# Codex Auto Pilot
 
-> [!IMPORTANT]
-> **The maintained `auto-pilot` skill now lives in
-> [Tomstack](https://github.com/tombelieber/tomstack/tree/main/skills/engineering/auto-pilot).**
-> Install and update the reusable skill from Tomstack. This repository remains
-> the supported home of the Codex plugin, CLI, hooks, run history, and releases.
+Auto Pilot keeps one Codex task accountable until one of two real delivery
+goals is achieved:
 
-Turn one approved software goal, plan, or design spec into a production-ready pull request, then promote that exact candidate in a separately authorized release session.
+- `PR_READY` — an open PR is fully ready for production release; the only next
+  action is protected merge/deploy/distribution.
+- `SHIPPED` — the exact candidate is live and proven in production, with zero
+  scoped TODOs, follow-ups, actionable warnings, or closeout leftovers.
+
+The maintained reusable source lives in Tomstack. This repository packages the
+Codex-compatible skill, local CLI, passive hooks, validator, and history tools.
+
+## Use it
 
 ```text
 $auto-pilot pr docs/approved-plan.md
 $auto-pilot ship docs/approved-plan.md
-$auto-pilot release https://github.com/owner/repo/pull/123
 ```
 
-Auto Pilot v0.11.0 keeps one accountable Sol owner in control without forcing an agent team or fresh implementation task. The owner may finish the goal in its current session, or independently choose fresh owner stages and leaf workers when context separation or parallelism materially helps. Reference preferences are `gpt-5.6-sol` with `xhigh` thinking for owner stages and `gpt-5.6-luna` with `max` for optional leaves. These are configurable examples, not delivery evidence or authority.
+`release`, `promote`, and `deploy` remain compatibility aliases for `ship`
+starting from an existing candidate. They do not create a third goal mode.
 
-## What it does
+`pr` never merges or mutates production. `ship` performs everything required:
+implementation, review, tests, PR, exact-candidate admission, protected merge,
+release/deployment, production proof, applicable notes, and safe cleanup.
 
-1. Treats a complete approved artifact as the PR-stage implementation input.
-2. Lets the accountable owner choose direct execution or optional fresh stages; `tiny` and `substantive` remain advisory metadata only.
-3. Allows optional leaf workers without recommending them, then returns their results to the owner for one consolidated review, direct fixes, exact-candidate verification, and PR creation.
-4. Stops at an open, unmerged `pr_ready` result with no production mutation.
-5. Promotes only through a fresh release task—started manually with `release`, or automatically after `pr_ready` when the current command explicitly selects `ship`.
+```text
+approved goal
+   |
+   +-- pr ----> implementation + shared release-readiness gate ----> PR_READY
+   |
+   +-- ship --> implementation + shared release-readiness gate
+                    --> attempt-bound admission --> merge --> deploy
+                    --> exact production proof --> notes + cleanup --> SHIPPED
 
-An independent Codex task is not a collaboration subagent. Auto Pilot does not prescribe agent teams, worker counts, or wave cadence. If an owner independently chooses collaboration, every helper is a terminal leaf that must not spawn, fork, create another task, or delegate. A fresh stage owner may itself be a child task and may still choose its own leaves. Mechanical inventory and verification belong in deterministic repository scripts or bounded tool calls.
-
-## Execution topology
-
-The normal path is one accountable Sol owner completing the PR stage in its
-current session. Context separation is an owner-selected scaling pattern, not a
-mandatory classifier result. Native compaction stays inside the same session;
-creating a new session creates a new owner stage.
-
-```mermaid
-flowchart TB
-    START["User<br/>$auto-pilot pr or ship approved-plan.md"] --> OWNER
-
-    subgraph PR["PR stage — accountable Sol owner"]
-        OWNER["Read approved goal<br/>Bind repository truth"]
-        DIRECT["Implement in current session"]
-        REVIEW["One consolidated review<br/>Patch and exact-candidate checks"]
-        OPEN["Commit, push, and open PR"]
-
-        OWNER --> DIRECT --> REVIEW --> OPEN
-    end
-
-    STAGE["Optional fresh owner stage<br/>Same goal, compact Git handoff"]
-    LEAF["Optional terminal leaf worker<br/>Must not spawn or delegate"]
-    STAGE_LEAF["Optional terminal leaf<br/>Must not spawn or delegate"]
-
-    OWNER -.-> STAGE
-    OWNER -.-> LEAF
-    STAGE -.-> STAGE_LEAF
-    LEAF -->|"Return bounded result"| OWNER
-    STAGE_LEAF -->|"Return bounded result"| STAGE
-    STAGE -->|"Repository state + compact handoff"| REVIEW
-
-    OPEN --> CONTINUE{"Release continuation authorized?"}
-    CONTINUE -->|"No: pr"| READY["Open, unmerged PR<br/>pr_ready"]
-    CONTINUE -->|"Yes: ship"| RELEASE["Fresh Sol release task<br/>Live candidate → merge → proof"]
-    READY -.-> RELEASE
+waiting / blocked / incomplete = resumable checkpoint in the same task
 ```
 
-| Execution shape | When used | Ownership |
-|---|---|---|
-| Direct | Owner can reliably finish in the current context | Current Sol owner |
-| Fresh owner stage | Owner judges clean context separation useful | New Sol owner stage |
-| Leaf worker | Any owner independently judges a bounded packet useful | Terminal leaf; no delegation |
-| Release task | Explicit `ship` or later `release` authority | Fresh Sol release owner |
+An open PR, merged commit, deploy start, healthy runtime, or deployment without
+exact capability proof is not SHIPPED. A PR without verified release path,
+preflight, required inputs, current CI, and zero non-production leftovers is not
+PR_READY.
 
-Fresh-stage handoffs contain the approved goal, Git identities, completed and
-remaining outcomes, changed paths, check evidence, risks, and blockers—not
-copied conversation history or hidden reasoning. A continuation stage is a new
-owner stage, not a failure. `ship` likewise does not carry the PR conversation
-into release: it creates one fresh single-use task for a qualified PR head. If
-that exact attempt is already active, it is identified without another prompt;
-a terminal release task is never resumed.
+## It does not lock the task
+
+The invoking task remains owner through waits, failures, repairs, retries, and
+changed external state. Stop, SessionEnd, compaction, an incomplete receipt, or
+a final response does not make later turns read-only and does not require a new
+session. An ordinary follow-up such as “CI is green now, continue” resumes the
+same active goal.
+
+Admission is immutable only for one exact mutation attempt. If base, head, CI,
+contract, input, or external state changes before mutation, the task diagnoses
+and safely fixes or waits, then creates a new linked attempt. It never blindly
+reuses a stale binding. After mutation, it reconciles actual remote state before
+repository-defined bounded recovery.
+
+Normal CI, deploy, and observation waits are monitored in the current task.
+Only genuine authority, credential, destructive-data, billing, incompatible
+migration, safety, or ambiguous-remote-state decisions pause for user input.
+Supplying that input resumes the same task.
 
 ## Install
 
-### Maintained skill only (Codex, Claude Code, and other agents)
+From npm:
 
 ```bash
-npx skills@latest add tombelieber/tomstack --skill=auto-pilot
+npx codex-auto-pilot install
 ```
 
-This is the canonical reusable skill. Use the standalone plugin below when you
-also need Codex hooks, local run history, and the packaged CLI.
-
-### Codex plugin
+From this checkout:
 
 ```bash
-codex plugin marketplace add tombelieber/tomstack
-codex plugin add codex-auto-pilot@tomstack
+node bin/codex-auto-pilot.mjs install
 ```
 
-### CLI installer
+Preview without writing:
 
 ```bash
-npx github:tombelieber/codex-auto-pilot install
+node bin/codex-auto-pilot.mjs install --dry-run
 ```
 
-Or:
+Replace an older installed copy safely:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tombelieber/codex-auto-pilot/main/install.sh | sh
+node bin/codex-auto-pilot.mjs install --force
 ```
 
-Preview or verify an installation:
+The installer writes only the Auto Pilot skill under the selected agent home.
+It refuses collisions by default and creates a backup before `--force` replaces
+an existing copy.
+
+Verify:
 
 ```bash
-npx github:tombelieber/codex-auto-pilot install --dry-run
-npx github:tombelieber/codex-auto-pilot doctor
+node bin/codex-auto-pilot.mjs doctor
+node bin/codex-auto-pilot.mjs skill-path
 ```
 
-Use `install --force` only to replace an existing Auto Pilot skill; the installer backs up replaced content first. The default installer copies only the skill. It does not install custom agent profiles, change Codex concurrency, or edit `.codex/config.toml`.
+## Evidence contract
 
-To enable automatic local run history for a standalone skill installation:
-
-```bash
-npx github:tombelieber/codex-auto-pilot install --with-local-history
-```
-
-This adds four passive user-level Codex lifecycle hooks without changing model context. Existing hook definitions are preserved and backed up before modification. Review and trust newly installed hooks once with `/hooks`.
-
-## Configuration
-
-Preferences resolve in this order: current invocation flags, optional user configuration, then built-in defaults. The optional JSON file is `~/.codex-auto-pilot/config.json`; set `CODEX_AUTO_PILOT_CONFIG` to another absolute path. It is read only.
-
-```json
-{
-  "implementation": {"substantive_executor": "auto", "model": "gpt-5.6-sol", "thinking": "xhigh"},
-  "release": {"model": "gpt-5.6-sol", "thinking": "xhigh"},
-  "collaboration": {"policy": "auto", "model": "gpt-5.6-luna", "thinking": "max"}
-}
-```
-
-Invocation overrides are `--implementation-executor`, `--implementation-model`, `--implementation-thinking`, `--release-model`, `--release-thinking`, `--collaboration`, `--collaboration-model`, and `--collaboration-thinking`. See the full [configuration reference](skills/auto-pilot/references/configuration.md).
-
-`auto` leaves execution-shape selection with the accountable owner; it does not actively recommend a task or agent team. `task`, `direct`, and `subagent` remain explicit overrides. Collaboration `auto` only makes leaf workers available if an owner independently chooses them. Every leaf is terminal and may not delegate. If a fresh release task interface is unavailable, the PR owner stops at `pr_ready` and returns the exact `$auto-pilot release <PR URL>` command; it never releases in place.
-
-## Delivery modes
-
-PR mode is the default, but the explicit form is preferred:
+Schema v9 separates goal outcome from attempt status:
 
 ```text
-$auto-pilot pr docs/approved-plan.md
+goal_mode:       pr | ship
+goal.target:     PR_READY | SHIPPED
+goal.achieved:   PR_READY | SHIPPED | null
+attempt.result:  achieved | incomplete
+open_items:      [] for achieved; non-empty for incomplete
 ```
 
-It stops with an open, unmerged, production-ready PR and no production mutation.
+PR_READY includes one passed `exact-candidate` check and one passed
+`production-release-ready` check covering the real path, preflight,
+credentials, configuration, migrations, recovery, and exact next action.
 
-Ship mode is the one-command PR-to-production lane:
+SHIPPED additionally binds goal/attempt/contract/base/head/PR immediately before
+mutation, proves the merged identity and every impacted production capability,
+and completes applicable release notes and cleanup. Production-live with failed
+cleanup is recorded as incomplete and repaired before success.
 
-```text
-$auto-pilot ship docs/approved-plan.md
-```
-
-An equally clear current instruction such as “finish this and release it” may be normalized to `ship`. Auto Pilot still completes the PR stage first. Readiness requires promotable PASS exact-candidate evidence and current required CI for the live head. It then creates one fresh single-use release task, binds the task to the live head plus source-receipt and installed-contract SHA-256 values, and ends the PR controller. An already-active exact attempt is not prompted twice; a terminal one is never resumed. Questions, hypotheticals, future wishes, quoted examples, prior-chat intent, and negated release requests never select this mode.
-
-Release mode requires a new explicit invocation that identifies an existing PR:
-
-```text
-$auto-pilot release https://github.com/owner/repo/pull/123
-```
-
-It starts from the live candidate and validates one bounded admission packet before merge. The release task treats that candidate as immutable: it cannot edit source, create a commit or branch, open another PR, or repair CI/release tooling. Unless the user or repository declares another bound before promotion, the whole release-control task has a 10-minute wall-clock budget from live-PR binding; an unsafe in-flight mutation still reaches its next repository-defined safe boundary. It merges through the repository's normal protected path, uses the discovered release mechanism, handles approved migrations or backfills, and verifies each affected capability through its exact production actor, credential, scope, runtime principal, representative data, and terminal outcome. It then publishes canonical release notes and ends every `released` response with a compact release message linked to them. Live canaries are release-only and impact-selected; they are never run on every edit or commit. If the repository has no release mechanism, it stops after merging. A validated `pr_ready` receipt is required evidence, never release authority by itself.
-
-Each session reports one terminal state: the PR controller reports `pr_ready` or `blocked`; the fresh release controller reports `merged_main`, `released`, or `blocked`. Any terminal release result permanently seals that task against later production mutation. Its completion receipt records plan, Git, criteria, checks, PR/release evidence, exact release capability reachability, contract/source bindings, complete-task timing, and blockers without copying model reasoning. A successful deployment with missing reachability proof remains `blocked`, not `released`.
-
-After a successful merge or release, Auto Pilot automatically closes the
-task-owned local workspace: it verifies the worktree is clean, unlocked,
-merged, pushed, and reachable from the remote base; removes it with Git from
-outside the target directory; prunes stale metadata; and safe-deletes the task
-branch. Remote-branch deletion remains subject to repository policy. It never
-force-removes a worktree; an unsafe or failed cleanup makes the run `blocked`.
-
-## Local run history
-
-The plugin bundles an optional, local-only collector. After its hooks are trusted, every leading execution-form `$auto-pilot` invocation is captured automatically; inline discussions and optimization questions are ignored. Hooks now write only thin lifecycle bookmarks:
-
-1. `UserPromptSubmit` records the invocation boundary, source offset, and exact skill/config identity.
-2. `SubagentStop` records the agent identity and source path/size without copying or parsing it.
-3. `Stop` records the terminal boundary, final-message hash, and a small receipt-source snapshot when present.
-4. `SessionEnd` records a recovery boundary for an unfinished invocation.
-
-Heavy transcript parsing, hashing, token accounting, topology reconstruction, routing audit, and receipt validation run post-hoc with `history materialize`; `list`, `goals`, and `report` materialize pending runs automatically. The original Codex JSONL stays canonical and is not duplicated for new runs. Collection returns empty hook context, calls no model, adds no orchestration, and uploads nothing. Missing or changed source evidence stays unknown instead of becoming a false zero.
+Validate a receipt:
 
 ```bash
-codex-auto-pilot history status
-codex-auto-pilot history materialize
-codex-auto-pilot history list --since 30d
-codex-auto-pilot history goals --since 30d
-codex-auto-pilot history report --since 30d
-codex-auto-pilot history retention 30
-codex-auto-pilot history retention forever
+python3 skills/auto-pilot/scripts/validate_receipt.py /absolute/path/to/receipt.json
 ```
 
-The archive lives at `~/.codex-auto-pilot/history` by default. Override it with `CODEX_AUTO_PILOT_DATA`. See the [history schema](skills/auto-pilot/references/history-schema.md), the [OSS observability research](https://github.com/tombelieber/codex-auto-pilot/blob/main/docs/research/oss-agent-eval-observability.md), and the [Tokscale parser audit](https://github.com/tombelieber/codex-auto-pilot/blob/main/docs/research/tokscale-session-analysis.md).
+Read the full [receipt schema](skills/auto-pilot/references/receipt-schema.md).
 
-## Is this topology optimal?
+## Execution and configuration
 
-It is the current **owner-decided reference topology**, not a universal or statistically proven optimum. It preserves three non-negotiable constraints: one accountable owner for each active stage, terminal leaf workers that never delegate, and a fresh production-authority boundary. It does not force context separation merely because scope metadata says `substantive`. Automatic `ship` removes a user round trip without merging the PR and release contexts.
+The invoking task may work directly or use bounded terminal helpers. Helpers
+cannot spawn, fork, create another owner task, delegate, merge, deploy, migrate,
+roll back, or own production. Native compaction is the supported continuation
+mechanism.
 
-Verify it from receipt-backed local history rather than intuition:
+Optional settings live at `~/.codex-auto-pilot/config.json`. Invocation flags
+override user config, which overrides defaults. Existing `release.*` settings
+mean production-phase preferences for ship; the name is retained for config
+compatibility only. Legacy executor value `task` cannot transfer ownership under
+the current contract.
 
-1. Compare only runs with a valid completion receipt and an identical complete skill-bundle hash.
-2. Cohort comparable work by mode, advisory scope hint, actual execution shape, repository, risk class, and required quality gates.
-3. Measure total lifecycle tokens, uncached input, elapsed time, tool calls, compactions, handoff count, repair work, blocked rate, and terminal quality evidence.
-4. Reject a cheaper topology if it increases escaped defects, incomplete scope, repeated repair loops, or unsafe release outcomes.
-5. Promote a routing change only after several comparable successful runs show a repeatable improvement; never infer causality from one unusually small task.
+See [configuration](skills/auto-pilot/references/configuration.md) and
+[owner-directed execution](skills/auto-pilot/references/delegated-implementation.md).
 
-The collector's benchmark cohort excludes legacy or unverified outcomes. Fresh user-visible owner stages are grouped only when the dispatching routing marker and receiving invocation share the same opaque goal ID. Collaboration-agent tokens remain separate and unverified in schema v4 because child JSONL may replay parent history; those runs stay outside token-cost cohorts until semantic replay deduplication is proven.
+## Private local history
 
-## Privacy and safety
+Enable passive local collection explicitly:
 
-- No remote telemetry is collected.
-- Local run history is enabled only by trusting the plugin hooks or using `install --with-local-history`.
-- Referenced local transcripts may contain prompts, source code, tool output, credentials, personal data, and private paths. New history runs do not duplicate them, but both the Codex session store and the private marker archive must never be committed or uploaded without review and redaction.
-- No plan, code, or repository data is uploaded by this project.
-- No credentials are bundled; normal local and repository authentication applies.
-- The public GitHub handle `tombelieber` is intentionally present.
+```bash
+node bin/codex-auto-pilot.mjs install --with-local-history
+```
 
-`npm run check` scans the distributable tree and Git history for common credentials, private home paths, non-noreply email addresses, environment files, private keys, and symlinks.
+Useful commands:
 
-## Limits
+```bash
+node bin/codex-auto-pilot.mjs history status
+node bin/codex-auto-pilot.mjs history materialize
+node bin/codex-auto-pilot.mjs history list
+node bin/codex-auto-pilot.mjs history goals
+node bin/codex-auto-pilot.mjs history report
+node bin/codex-auto-pilot.mjs history retention 90
+```
 
-- The supplied artifact must already contain the product decisions and acceptance criteria needed for implementation.
-- Repository instructions, deterministic checks, branch protection, and production safety still apply.
-- Auto Pilot does not invent a deployment, migration, backfill, or rollback mechanism when the repository has none.
-- Model and tool availability depend on the active Codex runtime.
-- Automatic `ship` requires the runtime to create a separate task. If unavailable, Auto Pilot returns the exact manual `release` command and never falls back to same-session production mutation.
-- Codex transcript JSONL is not a stable public schema. The collector references the original local file and independently versions marker, parser, and materializer schemas so available evidence can be rebuilt.
+History schema v6 maintains an active goal per task/session. Ordinary follow-up
+turns attach automatically until a validated PR_READY or SHIPPED receipt clears
+the goal. Stop/SessionEnd ends only a turn checkpoint. Reports separate achieved
+goal outcomes, attempt results, and legacy terminal claims; incomplete or legacy
+receipts never enter current achieved benchmarks.
 
-## Contributing and security
+Collection is deterministic, local, network-free, and model-free. It records
+thin lifecycle markers and derives metrics post-hoc from existing Codex JSONL.
+It does not copy hidden reasoning or upload data. Missing archived validators
+fail closed rather than letting a new schema reinterpret old receipts.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+See [history schema](skills/auto-pilot/references/history-schema.md).
 
-## License
+## Development
 
-[MIT](LICENSE) © tombelieber
+```bash
+npm test
+npm run check
+```
+
+`npm run check` validates syntax, tests, public-safety rules, and the packed
+artifact. This project is MIT licensed.

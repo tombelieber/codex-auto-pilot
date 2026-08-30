@@ -1,7 +1,7 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.11.0",
-  "description": "Owner-directed Codex delivery with verified PRs, terminal leaf workers, and safe release boundaries.",
+  "version": "0.13.0",
+  "description": "Owner-directed delivery to fully release-ready PRs or verified production with zero scoped leftovers.",
   "bin": {
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
   },

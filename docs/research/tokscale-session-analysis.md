@@ -10,7 +10,7 @@ The real outcome is not “port Tokscale.” It is:
 
 > Preserve the few Auto Pilot facts that cannot be reconstructed later, then deterministically rebuild invocation, topology, token, timing, and outcome metrics from local Codex JSONL without slowing the agent turn.
 
-Tokscale already demonstrates the difficult post-hoc half: safe append-only resume, stateful Codex token parsing, fork/replay deduplication, explicit unknown states, and derived-cache invalidation. Auto Pilot still needs its own thin markers because Tokscale does not know an `$auto-pilot` invocation boundary, skill/config bundle, fresh-stage lineage, routing marker, or receipt-backed terminal outcome.
+Tokscale already demonstrates the difficult post-hoc half: safe append-only resume, stateful Codex token parsing, fork/replay deduplication, explicit unknown states, and derived-cache invalidation. Auto Pilot still needs its own thin markers because Tokscale does not know an `$auto-pilot` invocation boundary, skill/config bundle, active-goal lineage, routing marker, or receipt-backed goal outcome.
 
 ## Audited source and licence
 
@@ -46,7 +46,7 @@ For Auto Pilot, the important consequence is that a compaction should not make a
 
 Tokscale reads `forked_from_id` and Codex's `source.subagent.thread_spawn.parent_thread_id`, skips inherited parent history until the child reaches its own turn, and creates a dedup scope shared by replayed fork events.[^fork-lineage][^fork-skip]
 
-That allows Auto Pilot to reconstruct ordinary collaboration-subagent ancestry from raw Codex sessions without adding tool-by-tool telemetry hooks. One gap remains: a separately created fresh owner task is not necessarily a Codex fork. A tiny explicit `goal_id`/`parent_run_id` breadcrumb is still required when Auto Pilot creates that fresh stage. Native compaction remains the same session and needs no new stage marker.
+That allows Auto Pilot to reconstruct ordinary collaboration-subagent ancestry from raw Codex sessions without adding tool-by-tool telemetry hooks. Current execution keeps the invoking task as owner; schema-v6 active-goal state links ordinary later prompts to the same goal. Historical fresh-stage breadcrumbs remain readable only for legacy analysis. Native compaction remains the same task and needs no new marker.
 
 ## Minimal thin-marker design after this audit
 
@@ -75,7 +75,7 @@ Keep the existing hook set in [`hooks/hooks.json`](../../hooks/hooks.json), but 
 | `Stop` | Append end boundary and final-message hash; copy the small receipt source if its temporary path may disappear. | Receipt validation, root transcript hash/parse, routing audit, metrics, and retention work. |
 | `SessionEnd` | Append recovery boundary only. | Find and recover unfinished runs. |
 
-The receipt eligibility contract remains the materialized output, while schema v4 stops duplicating new Codex transcripts. Thin markers and independently versioned derived files evolve the existing [history schema](../../skills/auto-pilot/references/history-schema.md); they are not a second telemetry system.
+The receipt eligibility contract remains the materialized output. Schema v4 stopped duplicating new Codex transcripts; schema v5 preserved immutable invocation identity; current schema v6 separates active goals from turn attempts and normalizes every production alias to same-task ship routing. Thin markers and independently versioned derived files evolve the existing [history schema](../../skills/auto-pilot/references/history-schema.md); they are not a second telemetry system.
 
 ## What not to port
 
@@ -107,7 +107,7 @@ Reuse the **contracts**, not the product:
 - one Codex-only post-hoc scan through the terminal byte boundary;
 - `last_token_usage` increments with cumulative duplicate/reset evidence;
 - independently versioned marker, parser, and materializer layers; and
-- fail-open reporting but fail-closed benchmark eligibility. Schema v4 keeps collaboration-agent token totals unverified and outside cost cohorts until semantic replay dedup is implemented and proven.
+- fail-open reporting but fail-closed benchmark eligibility. Current schema v6 keeps collaboration-agent token totals unverified and outside cost cohorts until semantic replay dedup is implemented and proven, and requires a validated achieved outcome plus one exact bundle for strict comparisons.
 
 If substantial Tokscale code is copied rather than independently reimplemented in JavaScript, add the required Tokscale MIT attribution before release.[^license]
 
