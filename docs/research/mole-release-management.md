@@ -9,7 +9,7 @@ _Checked 2026-08-21 against first-party repositories and documentation only. Mol
 ## Decision for Auto Pilot
 
 1. **Mole does not automatically delete a local worktree merely because its PR merged or its release shipped.** GitHub can delete a merged PR’s remote head branch when that repository setting is enabled, but that is a remote-branch operation, not local-worktree disposal.[^github-branch-delete] Git itself says a linked worktree is removed with `git worktree remove`; `prune` only removes administrative records for worktree directories that are already missing.[^git-worktree] Mole adopts an even stricter product rule: worktree staleness is not safely decidable, so it removes only whitelisted rebuildable artifacts inside a worktree and never the whole worktree.[^mole-worktree] **Auto Pilot intentionally differs by user decision:** after a verified merge, it automatically removes only its own clean, unlocked, pushed, remote-reachable worktree and fails closed instead of force-removing an uncertain one.
-2. **Treat the release note as part of release completion, not optional copy.** Mole’s tag workflow creates a stable release with `generate_release_notes: false`; curated notes are a required follow-up using `gh release edit`.[^mole-workflow-release][^mole-notes-publish] For Auto Pilot, a run should not report `released` until the repository’s release note exists, the release URL is known, and the final response ends with a compact release message linking to it.
+2. **Treat the release note as part of release completion, not optional copy.** Mole’s tag workflow creates a stable release with `generate_release_notes: false`; curated notes are a required follow-up using `gh release edit`.[^mole-workflow-release][^mole-notes-publish] For Auto Pilot, a run should not report `SHIPPED` until every applicable note is published and the final response ends with its compact release message.
 3. **Keep artifact publication, release qualification, and announcement as separate gates.** Mole verifies assets, checksums, and a real previous-version self-update before publishing notes or announcing the release; Homebrew remains a separately verified downstream channel.[^mole-post-release]
 
 ## What Mole actually does
@@ -45,18 +45,18 @@ checked automatic cleanup policy than Mole:
 | State | Worktree action |
 |---|---|
 | PR open or release incomplete | Keep it. |
-| PR merged / release shipped | Attempt removal only for the task-owned worktree after proving it clean, unlocked, pushed, and reachable from the remote base; otherwise retain it and report a closeout warning. |
+| PR merged / production live | Attempt removal only for the task-owned worktree after proving it clean, unlocked, pushed, and reachable from the remote base; an actionable cleanup failure keeps the goal incomplete. |
 | Cleanup eligible | Persist evidence outside the target, run from the primary checkout, use `git worktree remove <path>` rather than raw filesystem deletion, prune metadata, and safe-delete branches.[^git-worktree][^mole-worktree] |
 | Directory is already missing | `git worktree prune` may remove stale administrative metadata; it is not the command for deciding or deleting a live worktree.[^git-worktree] |
 
-This separates two facts—**delivery reached production** and **local workspace
-cleanup passed**. Production proof controls `released`; if cleanup fails after
-production is live, retain the workspace and report the closeout warning rather
-than rewriting production truth as `blocked`.
+This preserves both facts—**delivery reached production** and **local workspace
+cleanup passed**—without conflating them. Production may already be live while
+the goal remains an incomplete, resumable attempt; `SHIPPED` requires both
+production proof and applicable scoped closeout.
 
 ### Release completion gates
 
-An Auto Pilot run should report `released` only after all applicable items are true:
+An Auto Pilot run should report `SHIPPED` only after all applicable items are true:
 
 1. The exact release commit is merged and tagged through the repository’s normal mechanism.
 2. Required artifacts and integrity files exist at the release URL.
@@ -64,24 +64,24 @@ An Auto Pilot run should report `released` only after all applicable items are t
 4. The repository release note is published in its established format.
 5. The final AI response ends with the compact release block below.
 
-If the repository has no production or public-distribution mechanism, report `blocked` before merge. Missing production proof remains `blocked`; a missing note after exact production proof is a visible closeout warning, not a merge-only terminal state.
+If the repository has no production or public-distribution mechanism, pause before merge with an incomplete checkpoint. Missing production proof or an applicable missing note keeps `goal.achieved` null and the same task resumable.
 
 ### Mandatory final-response suffix after a release
 
-Append this as the final section of the agent response whenever the terminal state is `released`:
+Append this as the final section of the agent response whenever the goal reaches `SHIPPED`:
 
 ```markdown
 ### Release
 
-**V<version> <name>** — Released
+**V<version> <name>** — SHIPPED
 
 - User-visible change: <highest-impact outcome in one sentence>
 - Verification: <exact post-release proof>
-- Distribution: <channels completed; any downstream channel still pending>
+- Distribution: <all applicable completed channels>
 - Release notes: [V<version>](<release-url>)
 ```
 
-The one-line release message is the title plus the first bullet: `Released V<version>: <highest-impact outcome>.` Keep the full changelog on the release page; the response suffix is a scan-friendly receipt, not a second independent changelog. This adapts Mole’s impact-first notes and channel separation without copying its project-specific bilingual or branding requirements into every repository.[^mole-channels][^mole-notes-format]
+The one-line release message is the title plus the first bullet: `Shipped V<version>: <highest-impact outcome>.` Keep the full changelog on the release page; the response suffix is a scan-friendly receipt, not a second independent changelog. This adapts Mole’s impact-first notes and channel separation without copying its project-specific bilingual or branding requirements into every repository.[^mole-channels][^mole-notes-format]
 
 ## Primary sources
 
