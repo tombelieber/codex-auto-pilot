@@ -6,7 +6,7 @@ _Checked 2026-08-04 against first-party documentation and repositories._
 
 Keep a **thin, local-first Auto Pilot collector as the canonical record**, then add an **OTLP/OpenInference export adapter**. Do not make a tracing platform a required runtime dependency yet.
 
-The mature projects solve trace storage, search, dashboards, datasets, and evaluators. None of them currently identifies a `$auto-pilot` invocation, clones the original Codex transcript, understands Auto Pilot's `pr_ready` / `merged_main` / `released` contract, or proves Git/PR/release outcomes without an Auto Pilot-specific adapter. Codex already emits opt-in OpenTelemetry logs and metrics for API, token, turn, hook, and tool activity, but its documented export is not a lossless replacement for the persisted session transcript.[^codex-otel]
+The mature projects solve trace storage, search, dashboards, datasets, and evaluators. None of them currently identifies a `$auto-pilot` invocation, clones the original Codex transcript, understands Auto Pilot's `pr_ready` / `released` / `blocked` contract, or proves Git/PR/release outcomes without an Auto Pilot-specific adapter. Codex already emits opt-in OpenTelemetry logs and metrics for API, token, turn, hook, and tool activity, but its documented export is not a lossless replacement for the persisted session transcript.[^codex-otel]
 
 Recommended boundary:
 

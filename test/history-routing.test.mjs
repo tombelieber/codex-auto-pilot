@@ -107,58 +107,43 @@ test('routing audit honors owner-decided primary stages and rejects explicit con
   assert.match(helpersOff.deviations.join('\n'), /collaboration.policy=off/)
 })
 
-test('release routing audits fresh, fallback, and current release task lanes', () => {
-  const releaseTask = {
-    lane: 'fresh_release_task', task_ref: 'release-task', worktree: true,
-    model: 'gpt-5.6-sol', thinking: 'xhigh', reason: null,
-  }
-  const fresh = auditRouting({
-    message: `::created-thread{threadId="implementation-task"}\n::created-thread{threadId="release-task"}\n${marker(independentTask(), releaseTask)}`,
+test('release routing keeps ship and release authority in their current task', () => {
+  const currentShip = auditRouting({
+    message: marker({
+      lane: 'direct', task_ref: null, worktree: null,
+      model: 'gpt-5.6-sol', thinking: 'xhigh', reason: 'The ship owner implemented in the current task.',
+    }, {
+      lane: 'current_ship_task', task_ref: null, worktree: null,
+      model: 'gpt-5.6-sol', thinking: 'xhigh', reason: 'The ship owner continued through production.',
+    }),
     manifest: manifest({continuation: 'release'}),
   })
-  assert.equal(fresh.status, 'passed')
+  assert.equal(currentShip.status, 'passed')
 
-  const modelFallback = auditRouting({
-    message: `::created-thread{threadId="implementation-task"}\n::created-thread{threadId="release-task"}\n${marker(independentTask(), {
-      ...releaseTask, model: 'runtime-fallback-model', reason: 'Configured release model unavailable.',
+  const freshTask = auditRouting({
+    message: `::created-thread{threadId="release-task"}\n${marker({
+      lane: 'direct', task_ref: null, worktree: null,
+      model: 'gpt-5.6-sol', thinking: 'xhigh', reason: 'The ship owner implemented in the current task.',
+    }, {
+      lane: 'fresh_release_task', task_ref: 'release-task', worktree: true,
+      model: 'gpt-5.6-sol', thinking: 'xhigh', reason: null,
     })}`,
     manifest: manifest({continuation: 'release'}),
   })
-  assert.equal(modelFallback.status, 'fallback')
+  assert.equal(freshTask.status, 'deviation')
+  assert.match(freshTask.deviations.join('\n'), /ship release continuation must remain in the same task/)
 
-  const duplicatedTask = auditRouting({
-    message: `::created-thread{threadId="implementation-task"}\n${marker(independentTask(), {
-      ...releaseTask, task_ref: 'implementation-task',
-    })}`,
+  const currentShipModel = auditRouting({
+    message: marker({
+      lane: 'direct', task_ref: null, worktree: null,
+      model: 'gpt-5.6-terra', thinking: 'high', reason: 'The current ship owner implemented directly.',
+    }, {
+      lane: 'current_ship_task', task_ref: null, worktree: null,
+      model: 'gpt-5.6-terra', thinking: 'high', reason: 'The current task continued through production.',
+    }),
     manifest: manifest({continuation: 'release'}),
   })
-  assert.equal(duplicatedTask.status, 'deviation')
-  assert.match(duplicatedTask.deviations.join('\n'), /distinct task_ref/)
-
-  const extraReleaseTask = auditRouting({
-    message: `::created-thread{threadId="implementation-task"}\n::created-thread{threadId="release-task"}\n::created-thread{threadId="second-release-task"}\n${marker(independentTask(), releaseTask)}`,
-    manifest: manifest({continuation: 'release'}),
-  })
-  assert.equal(extraReleaseTask.status, 'passed')
-  assert.match(extraReleaseTask.unverified.join('\n'), /second-release-task/)
-
-  const fallback = auditRouting({
-    message: `::created-thread{threadId="implementation-task"}\n${marker(independentTask(), {
-      lane: 'fallback_command', task_ref: null, worktree: null, model: null, thinking: null,
-      reason: 'Fresh task interface unavailable.',
-    })}\n$auto-pilot release https://github.com/owner/repo/pull/1`,
-    manifest: manifest({continuation: 'release'}),
-  })
-  assert.equal(fallback.status, 'fallback')
-
-  const malformedFallback = auditRouting({
-    message: `::created-thread{threadId="implementation-task"}\n${marker(independentTask(), {
-      lane: 'fallback_command', task_ref: null, worktree: null, model: null, thinking: null,
-      reason: 'Fresh task interface unavailable.',
-    })}\n$auto-pilot release not-a-pr`,
-    manifest: manifest({continuation: 'release'}),
-  })
-  assert.equal(malformedFallback.status, 'deviation')
+  assert.equal(currentShipModel.status, 'passed')
 
   const current = auditRouting({
     message: marker(

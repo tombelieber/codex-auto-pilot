@@ -3,7 +3,7 @@ import {appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdi
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import test from 'node:test'
-import {parseCodexTranscript} from '../skills/auto-pilot/scripts/history-materialize.mjs'
+import {enforceReleaseRouting, parseCodexTranscript} from '../skills/auto-pilot/scripts/history-materialize.mjs'
 import {
   handleHookEvent,
   historyReport,
@@ -34,29 +34,43 @@ function assistantMessage(text) {
 
 function validPrReceipt() {
   return {
-    schema_version: 7,
+    schema_version: 8,
     mode: 'pr',
     terminal_state: 'pr_ready',
     plan: {source: 'docs/plan.md', approved: true},
     summary: 'Implemented and verified the approved scope.',
     git: {base_branch: 'main', delivery_branch: 'feature/test', commits: ['a'.repeat(40)]},
     criteria: [{id: 'AC-1', status: 'passed', evidence: 'Exact acceptance path passed'}],
-    checks: [{name: 'test', status: 'passed', evidence: 'Bounded command artifact'}],
+    checks: [{
+      name: 'exact-candidate', status: 'passed',
+      candidate_base_sha: 'b'.repeat(40), candidate_head_sha: 'a'.repeat(40),
+      pull_request_url: 'https://github.com/owner/repo/pull/1',
+      promotable: true, required_ci_status: 'passed',
+      evidence: 'Promotable exact-candidate PASS for the live head',
+    }],
     pull_request: {url: 'https://github.com/owner/repo/pull/1', status: 'open', merged: false, merge_sha: null},
     release: {status: 'not_requested', url: null, notes_url: null, message: null, evidence: 'PR stage; production was not changed'},
     blockers: [],
   }
 }
 
-function routingMarker(implementation, continuation) {
-  return `<!-- auto-pilot-routing: ${JSON.stringify({implementation, continuation})} -->`
+function validBlockedReleaseReceipt() {
+  return {
+    schema_version: 8,
+    mode: 'release',
+    terminal_state: 'blocked',
+    plan: {source: 'docs/plan.md', approved: true},
+    summary: 'Production delivery could not safely continue.',
+    blockers: [{
+      phase: 'pre_mutation', category: 'credential',
+      reason: 'Production credential is unavailable.',
+      evidence: 'The repository release preflight reported the missing credential before merge.',
+    }],
+  }
 }
 
-function independentImplementation(taskRef = 'implementation-task') {
-  return {
-    lane: 'independent_task', task_ref: taskRef, worktree: true,
-    model: 'gpt-5.6-sol', thinking: 'xhigh', reason: null,
-  }
+function routingMarker(implementation, continuation) {
+  return `<!-- auto-pilot-routing: ${JSON.stringify({implementation, continuation})} -->`
 }
 
 test('invocation detection accepts selected or leading skills without matching discussion', () => {
@@ -82,10 +96,29 @@ test('invocation detection accepts selected or leading skills without matching d
   assert.equal(parseAutoPilotInvocation('$auto-pilot pr docs/plan.md 完成之後希望上線').continuation, null)
   assert.equal(parseAutoPilotInvocation('$auto-pilot docs/plan.md?template=1. Finish and release it.').continuation, 'release')
   assert.equal(parseAutoPilotInvocation('$auto-pilot ship docs/plan.md?template=1').continuation, 'release')
+  assert.equal(parseAutoPilotInvocation('$auto-pilot ship docs/plan.md. Do not deploy a second copy.').continuation, 'release')
+  assert.equal(parseAutoPilotInvocation('$auto-pilot docs/plan.md ship it').continuation, 'release')
+  assert.equal(parseAutoPilotInvocation('$auto-pilot docs/plan.md deploy this').continuation, 'release')
+  assert.equal(parseAutoPilotInvocation('$auto-pilot docs/plan.md go live').continuation, 'release')
   assert.equal(isAutoPilotInvocation('Can $auto-pilot collect history automatically?'), false)
   assert.equal(isAutoPilotInvocation('Can we improve [$auto-pilot](/opt/skills/auto-pilot/SKILL.md) token usage?'), false)
   assert.equal(isAutoPilotInvocation('[$auto-pilot](/opt/skills/auto-pilot/SKILL.md) do not start; only confirm readiness'), false)
   assert.equal(isAutoPilotInvocation('[$auto-pilot](/opt/skills/auto-pilot/SKILL.md) 我想優化這個 skill'), false)
+})
+
+test('released history requires the current-task continuation lane', () => {
+  const completion = {terminal_state: 'released', evidence: {status: 'valid', mode: 'release'}}
+  const manifest = {schema_version: 5, mode: 'pr', continuation: 'release'}
+  const rejected = enforceReleaseRouting(completion, {
+    status: 'deviation', declared: {continuation: {lane: 'fresh_release_task'}},
+  }, manifest)
+  assert.equal(rejected.terminal_state, 'unknown')
+  assert.equal(rejected.evidence.status, 'routing_mismatch')
+
+  const accepted = enforceReleaseRouting(completion, {
+    status: 'passed', declared: {continuation: {lane: 'current_ship_task'}},
+  }, manifest)
+  assert.equal(accepted, completion)
 })
 
 test('post-hoc parser uses last-token increments and survives duplicates and compaction resets', async () => {
@@ -191,13 +224,14 @@ test('hooks archive one complete root and subagent run with deterministic metric
       agent_id: 'agent-1', agent_type: 'worker', agent_transcript_path: agentTranscript,
     }, {dataRoot, now: () => finish})
     const receipt = join(root, 'receipt.json')
-    writeFileSync(receipt, JSON.stringify(validPrReceipt()))
+    writeFileSync(receipt, JSON.stringify(validBlockedReleaseReceipt()))
     const finalMessage = `Complete.
-::created-thread{threadId="implementation-task"}
-::created-thread{threadId="release-task"}
-${routingMarker(independentImplementation(), {
-  lane: 'fresh_release_task', task_ref: 'release-task', worktree: true,
-  model: 'gpt-5.6-sol', thinking: 'xhigh', reason: null,
+${routingMarker({
+  lane: 'direct', task_ref: null, worktree: null,
+  model: 'gpt-5.6-sol', thinking: 'xhigh', reason: 'The ship owner implemented in the current task.',
+}, {
+  lane: 'current_ship_task', task_ref: null, worktree: null,
+  model: 'gpt-5.6-sol', thinking: 'xhigh', reason: 'The ship owner remained accountable through production.',
 })}
 <!-- auto-pilot-receipt: ${receipt} -->`
     appendFileSync(transcript, jsonl(assistantMessage(finalMessage)))
@@ -215,8 +249,9 @@ ${routingMarker(independentImplementation(), {
     const manifest = JSON.parse(readFileSync(join(run, 'manifest.json'), 'utf8'))
     const metrics = JSON.parse(readFileSync(join(run, 'metrics.json'), 'utf8'))
     assert.equal(manifest.status, 'finished')
-    assert.equal(manifest.schema_version, 4)
-    assert.equal(manifest.terminal_state, 'pr_ready')
+    assert.equal(manifest.schema_version, 5)
+    assert.equal(manifest.invocation_schema_version, 5)
+    assert.equal(manifest.terminal_state, 'blocked')
     assert.equal(manifest.mode, 'pr')
     assert.equal(manifest.continuation, 'release')
     assert.deepEqual(manifest.routing_config.implementation, {
@@ -241,7 +276,7 @@ ${routingMarker(independentImplementation(), {
     assert.deepEqual(metrics.subagent_efforts, {max: 1})
     assert.equal(metrics.effort, 'high')
     assert.equal(metrics.routing.status, 'passed')
-    assert.equal(metrics.routing.schema_version, 2)
+    assert.equal(metrics.routing.schema_version, 3)
     assert.match(metrics.routing.unverified.join('\n'), /parent-child delegation depth/)
     assert.equal(existsSync(join(run, 'transcript.jsonl')), false)
     assert.equal(existsSync(join(run, 'agents', 'agent-1.marker.json')), true)
@@ -259,7 +294,7 @@ ${routingMarker(independentImplementation(), {
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
-test('a valid v7 receipt remains valid when routing metadata is missing', async () => {
+test('a valid v8 PR receipt remains valid when routing metadata is missing', async () => {
   const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-history-routing-unknown-'))
   const dataRoot = join(root, 'data')
   const transcript = join(root, 'root.jsonl')
@@ -288,7 +323,7 @@ test('a valid v7 receipt remains valid when routing metadata is missing', async 
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
-test('schema-v2 history remains reportable after the v4 materializer upgrade', async () => {
+test('schema-v2 history remains reportable after the v5 materializer upgrade', async () => {
   const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-history-v2-'))
   const dataRoot = join(root, 'data')
   const run = join(dataRoot, 'runs', 'legacy-session--legacy-turn')
@@ -331,7 +366,8 @@ test('goal aggregation links only two-sided fresh-stage breadcrumbs', async () =
       const run = join(dataRoot, 'runs', runId)
       mkdirSync(run, {recursive: true})
       writeFileSync(join(run, 'manifest.json'), JSON.stringify({
-        schema_version: 4, run_id: runId, status: 'finished',
+        schema_version: 5, run_id: runId, status: 'finished',
+        skill_bundle_sha256: 'a'.repeat(64),
         started_at: `2026-08-01T00:0${index}:00.000Z`,
         ended_at: `2026-08-01T00:0${index + 1}:00.000Z`,
         goal_id: goalId, goal_id_source: source, goal_id_sources: [source],
@@ -351,6 +387,40 @@ test('goal aggregation links only two-sided fresh-stage breadcrumbs', async () =
     assert.equal(goals[0].total_tokens, 201)
     assert.equal(goals[0].active_duration_ms, 120000)
     assert.equal(goals[0].benchmark_eligible, true)
+  } finally { rmSync(root, {recursive: true, force: true}) }
+})
+
+test('benchmark cohorts exclude routing deviations and never hide bundle drift', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-benchmark-cohorts-'))
+  const dataRoot = join(root, 'data')
+  try {
+    const fixtures = [
+      ['passed-a', 'passed', 'a'.repeat(64)],
+      ['passed-b', 'passed', 'b'.repeat(64)],
+      ['deviation-a', 'deviation', 'a'.repeat(64)],
+    ]
+    for (const [runId, routingStatus, bundle] of fixtures) {
+      const run = join(dataRoot, 'runs', runId)
+      mkdirSync(run, {recursive: true})
+      writeFileSync(join(run, 'manifest.json'), JSON.stringify({
+        schema_version: 5, run_id: runId, status: 'finished',
+        started_at: '2026-08-01T00:00:00.000Z', ended_at: '2026-08-01T00:01:00.000Z',
+        skill_bundle_sha256: bundle, terminal_state: 'pr_ready', mode: 'pr',
+      }))
+      writeFileSync(join(run, 'metrics.json'), JSON.stringify({
+        duration_ms: 60000, token_usage_observed: true, collection_complete: true,
+        token_usage: {total_tokens: 100, cached_input_tokens: 10}, subagents: 0,
+        subagent_token_accounting_complete: true, routing: {status: routingStatus},
+      }))
+      writeFileSync(join(run, 'outcome.json'), JSON.stringify({completion_receipt: {status: 'valid'}}))
+    }
+    const report = await historyReport({dataRoot})
+    assert.equal(report.delivery_benchmark_runs, 3)
+    assert.equal(report.benchmark_runs, 2)
+    assert.equal(report.benchmark_cross_bundle_comparable, false)
+    assert.deepEqual(Object.keys(report.benchmark_bundle_cohorts), ['a'.repeat(64), 'b'.repeat(64)])
+    assert.equal(report.benchmark_bundle_cohorts['a'.repeat(64)].runs, 1)
+    assert.equal(report.benchmark_bundle_cohorts['b'.repeat(64)].runs, 1)
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
@@ -403,7 +473,7 @@ test('final-message keywords cannot create a verified terminal state', async () 
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
-test('receipt mode must match the invocation stage', async () => {
+test('ship requires a release-mode final receipt instead of stopping at PR readiness', async () => {
   const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-history-mode-'))
   const dataRoot = join(root, 'data')
   const transcript = join(root, 'root.jsonl')
@@ -413,7 +483,7 @@ test('receipt mode must match the invocation stage', async () => {
     writeFileSync(receipt, JSON.stringify(validPrReceipt()))
     await handleHookEvent({
       hook_event_name: 'UserPromptSubmit', session_id: 'session-mode', turn_id: 'turn-mode',
-      prompt: '$auto-pilot release PR #42', transcript_path: transcript,
+      prompt: '$auto-pilot ship docs/plan.md', transcript_path: transcript,
     }, {dataRoot})
     const message = `<!-- auto-pilot-receipt: ${receipt} -->`
     appendFileSync(transcript, jsonl(assistantMessage(message)))
@@ -429,6 +499,78 @@ test('receipt mode must match the invocation stage', async () => {
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
+test('legacy schema-v4 ship history preserves its historical PR-stage receipt semantics', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-history-legacy-ship-'))
+  const dataRoot = join(root, 'data')
+  const transcript = join(root, 'root.jsonl')
+  const receipt = join(root, 'receipt.json')
+  try {
+    writeFileSync(transcript, jsonl(tokens(10, 0, 1, 0, 11)))
+    writeFileSync(receipt, JSON.stringify(validPrReceipt()))
+    await handleHookEvent({
+      hook_event_name: 'UserPromptSubmit', session_id: 'legacy-ship', turn_id: 'legacy-turn',
+      prompt: '$auto-pilot ship docs/plan.md', transcript_path: transcript,
+    }, {dataRoot})
+    const message = `<!-- auto-pilot-receipt: ${receipt} -->`
+    appendFileSync(transcript, jsonl(assistantMessage(message)))
+    await handleHookEvent({
+      hook_event_name: 'Stop', session_id: 'legacy-ship', turn_id: 'legacy-turn',
+      transcript_path: transcript, last_assistant_message: message,
+    }, {dataRoot})
+    const run = join(dataRoot, 'runs', 'legacy-ship--legacy-turn')
+    const manifestPath = join(run, 'manifest.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    delete manifest.invocation_schema_version
+    writeFileSync(manifestPath, JSON.stringify({...manifest, schema_version: 4, collector_version: 4}))
+    await materializeHistory({dataRoot})
+    const outcome = JSON.parse(readFileSync(join(run, 'outcome.json'), 'utf8'))
+    assert.equal(outcome.completion_receipt.status, 'valid')
+    assert.equal(outcome.terminal_state, 'pr_ready')
+    const rematerializedMetricsPath = join(run, 'metrics.json')
+    const rematerializedMetrics = JSON.parse(readFileSync(rematerializedMetricsPath, 'utf8'))
+    writeFileSync(rematerializedMetricsPath, JSON.stringify({...rematerializedMetrics, materializer_version: 0}))
+    await materializeHistory({dataRoot})
+    const rebuiltManifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    const rebuiltOutcome = JSON.parse(readFileSync(join(run, 'outcome.json'), 'utf8'))
+    assert.equal(rebuiltManifest.invocation_schema_version, 4)
+    assert.equal(rebuiltManifest.collector_version, 4)
+    assert.equal(rebuiltOutcome.completion_receipt.status, 'valid')
+    assert.equal(rebuiltOutcome.terminal_state, 'pr_ready')
+  } finally { rmSync(root, {recursive: true, force: true}) }
+})
+
+test('materializer uses the archived bundle validator for historical receipts', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-history-archived-validator-'))
+  const dataRoot = join(root, 'data')
+  const transcript = join(root, 'root.jsonl')
+  const receipt = join(root, 'legacy-receipt.json')
+  try {
+    writeFileSync(transcript, jsonl(tokens(10, 0, 1, 0, 11)))
+    await handleHookEvent({
+      hook_event_name: 'UserPromptSubmit', session_id: 'legacy-validator', turn_id: 'legacy-validator-turn',
+      prompt: '$auto-pilot pr docs/plan.md', transcript_path: transcript,
+    }, {dataRoot})
+    const run = join(dataRoot, 'runs', 'legacy-validator--legacy-validator-turn')
+    const manifest = JSON.parse(readFileSync(join(run, 'manifest.json'), 'utf8'))
+    const archivedValidator = join(
+      dataRoot, 'versions', manifest.skill_bundle_sha256, 'bundle', 'scripts', 'validate_receipt.py',
+    )
+    writeFileSync(archivedValidator, 'import sys\nsys.exit(0)\n')
+    writeFileSync(receipt, JSON.stringify({schema_version: 7, mode: 'pr', terminal_state: 'pr_ready'}))
+    const message = `<!-- auto-pilot-receipt: ${receipt} -->`
+    appendFileSync(transcript, jsonl(assistantMessage(message)))
+    await handleHookEvent({
+      hook_event_name: 'Stop', session_id: 'legacy-validator', turn_id: 'legacy-validator-turn',
+      transcript_path: transcript, last_assistant_message: message,
+    }, {dataRoot})
+    await materializeHistory({dataRoot})
+    const outcome = JSON.parse(readFileSync(join(run, 'outcome.json'), 'utf8'))
+    assert.equal(outcome.completion_receipt.status, 'valid')
+    assert.equal(outcome.completion_receipt.schema_version, 7)
+    assert.equal(outcome.terminal_state, 'pr_ready')
+  } finally { rmSync(root, {recursive: true, force: true}) }
+})
+
 test('history rejects a shallow receipt that bypasses the full validator', async () => {
   const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-history-shallow-'))
   const dataRoot = join(root, 'data')
@@ -436,7 +578,7 @@ test('history rejects a shallow receipt that bypasses the full validator', async
   const receipt = join(root, 'receipt.json')
   try {
     writeFileSync(transcript, jsonl(tokens(10, 0, 1, 0, 11)))
-    writeFileSync(receipt, JSON.stringify({schema_version: 7, mode: 'pr', terminal_state: 'pr_ready'}))
+    writeFileSync(receipt, JSON.stringify({schema_version: 8, mode: 'pr', terminal_state: 'pr_ready'}))
     await handleHookEvent({
       hook_event_name: 'UserPromptSubmit', session_id: 'session-shallow', turn_id: 'turn-shallow',
       prompt: '$auto-pilot pr docs/plan.md', transcript_path: transcript,

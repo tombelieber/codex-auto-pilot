@@ -75,7 +75,7 @@ Keep the existing hook set in [`hooks/hooks.json`](../../hooks/hooks.json), but 
 | `Stop` | Append end boundary and final-message hash; copy the small receipt source if its temporary path may disappear. | Receipt validation, root transcript hash/parse, routing audit, metrics, and retention work. |
 | `SessionEnd` | Append recovery boundary only. | Find and recover unfinished runs. |
 
-The receipt eligibility contract remains the materialized output, while schema v4 stops duplicating new Codex transcripts. Thin markers and independently versioned derived files evolve the existing [history schema](../../skills/auto-pilot/references/history-schema.md); they are not a second telemetry system.
+The receipt eligibility contract remains the materialized output. Schema v4 stopped duplicating new Codex transcripts; current schema v5 also preserves immutable invocation-schema identity and same-task release routing. Thin markers and independently versioned derived files evolve the existing [history schema](../../skills/auto-pilot/references/history-schema.md); they are not a second telemetry system.
 
 ## What not to port
 
@@ -107,7 +107,7 @@ Reuse the **contracts**, not the product:
 - one Codex-only post-hoc scan through the terminal byte boundary;
 - `last_token_usage` increments with cumulative duplicate/reset evidence;
 - independently versioned marker, parser, and materializer layers; and
-- fail-open reporting but fail-closed benchmark eligibility. Schema v4 keeps collaboration-agent token totals unverified and outside cost cohorts until semantic replay dedup is implemented and proven.
+- fail-open reporting but fail-closed benchmark eligibility. Current schema v5 keeps collaboration-agent token totals unverified and outside cost cohorts until semantic replay dedup is implemented and proven, and requires passed routing plus one exact bundle for strict comparisons.
 
 If substantial Tokscale code is copied rather than independently reimplemented in JavaScript, add the required Tokscale MIT attribution before release.[^license]
 

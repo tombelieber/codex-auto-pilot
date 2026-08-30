@@ -25,14 +25,19 @@ const releaseMessage = `### Release
 
 function prReadyReceipt() {
   return {
-    schema_version: 7,
+    schema_version: 8,
     mode: 'pr',
     terminal_state: 'pr_ready',
     plan: {source: 'docs/plan.md', approved: true},
     summary: 'Implemented and verified the approved plan.',
     git: {base_branch: 'main', delivery_branch: 'feature/test', commits: [headSha]},
     criteria: [{id: 'AC-1', status: 'passed', evidence: 'Exact acceptance path passed'}],
-    checks: [{name: 'exact-candidate', status: 'passed', evidence: 'Promotable exact-candidate PASS for the live head'}],
+    checks: [{
+      name: 'exact-candidate', status: 'passed', candidate_base_sha: baseSha,
+      candidate_head_sha: headSha, pull_request_url: 'https://github.com/owner/repo/pull/1',
+      promotable: true, required_ci_status: 'passed',
+      evidence: 'Promotable exact-candidate PASS for the live head',
+    }],
     pull_request: {url: 'https://github.com/owner/repo/pull/1', status: 'open', merged: false, merge_sha: null},
     release: {status: 'not_requested', url: null, notes_url: null, message: null, evidence: 'PR stage; production was not changed'},
     blockers: [],
@@ -41,7 +46,7 @@ function prReadyReceipt() {
 
 function releasedReceipt(sourceReceipt, sourceReceiptSha) {
   return {
-    schema_version: 7,
+    schema_version: 8,
     mode: 'release',
     terminal_state: 'released',
     plan: {source: 'docs/plan.md', approved: true},
@@ -49,26 +54,23 @@ function releasedReceipt(sourceReceipt, sourceReceiptSha) {
     git: {base_branch: 'main', delivery_branch: 'feature/test', commits: [headSha]},
     criteria: [{id: 'AC-1', status: 'passed', evidence: 'Exact acceptance path passed'}],
     checks: [
+      {
+        name: 'exact-candidate', status: 'passed', candidate_base_sha: baseSha,
+        candidate_head_sha: headSha, pull_request_url: 'https://github.com/owner/repo/pull/1',
+        promotable: true, required_ci_status: 'passed',
+        evidence: 'Promotable exact-candidate PASS for the live head',
+      },
       {name: 'post-release E2E', status: 'passed', evidence: 'Production canary artifact'},
       {
         name: 'release-contract-binding',
         status: 'passed',
         contract_sha256: contractSha,
         source_receipt_sha256: sourceReceiptSha,
+        candidate_base_sha: baseSha,
         candidate_head_sha: headSha,
+        pull_request_url: 'https://github.com/owner/repo/pull/1',
         single_use: true,
         evidence: 'Recomputed before mutation from the installed contract and exact source receipt',
-      },
-      {
-        name: 'release-control-budget',
-        status: 'passed',
-        budget_seconds: 600,
-        live_pr_bound_at: '2026-08-28T09:00:00+08:00',
-        ended_at: '2026-08-28T09:08:30+08:00',
-        end_kind: 'terminal',
-        elapsed_seconds: 510,
-        outcome: 'passed',
-        evidence: 'Measured from live PR binding through the complete release task',
       },
     ],
     pull_request: {url: 'https://github.com/owner/repo/pull/1', status: 'merged', merged: true, merge_sha: mergeSha},
@@ -100,8 +102,9 @@ function releasedReceipt(sourceReceipt, sourceReceiptSha) {
         runtime_principal: 'production edge runtime database role',
         representative_data_case: 'legacy blank author identity and valid reply target',
         expected_terminal_outcome: 'provider reply identifier observed',
-        deterministic: {status: 'passed', evidence: 'Isolated provider E2E passed'},
-        production: {status: 'passed', evidence: 'Production canary reached provider reply'},
+        observed_terminal_outcome: 'provider reply identifier observed',
+        deterministic: {status: 'passed', artifact_ref: 'test:provider-e2e#reply-comment', evidence: 'Isolated provider E2E passed'},
+        production: {status: 'passed', artifact_ref: 'probe:production/reply-comment/run-123', evidence: 'Production canary reached provider reply'},
         authorization_changed: false,
       }],
     },

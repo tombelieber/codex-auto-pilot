@@ -6,7 +6,7 @@
 > Install and update the reusable skill from Tomstack. This repository remains
 > the supported home of the Codex plugin, CLI, hooks, run history, and releases.
 
-Turn one approved software goal, plan, or design spec into a production-ready pull request, then promote that exact candidate in a separately authorized release session.
+Turn one approved software goal, plan, or design spec into either a verified pull request or a production release at the boundary named by the command.
 
 ```text
 $auto-pilot pr docs/approved-plan.md
@@ -14,69 +14,56 @@ $auto-pilot ship docs/approved-plan.md
 $auto-pilot release https://github.com/owner/repo/pull/123
 ```
 
-Auto Pilot v0.11.0 keeps one accountable Sol owner in control without forcing an agent team or fresh implementation task. The owner may finish the goal in its current session, or independently choose fresh owner stages and leaf workers when context separation or parallelism materially helps. Reference preferences are `gpt-5.6-sol` with `xhigh` thinking for owner stages and `gpt-5.6-luna` with `max` for optional leaves. These are configurable examples, not delivery evidence or authority.
+Auto Pilot v0.12.0 keeps one accountable Sol owner in control without forcing an agent team. `pr` ends at a verified open PR. `ship` keeps that same accountable task through implementation, PR, merge, deployment or distribution, and production proof. Direct `release` promotes an existing PR in the current task. Reference preferences are `gpt-5.6-sol` with `xhigh` thinking for owners and `gpt-5.6-luna` with `max` for optional terminal leaves; these are configurable examples, not delivery evidence or authority.
 
 ## What it does
 
-1. Treats a complete approved artifact as the PR-stage implementation input.
-2. Lets the accountable owner choose direct execution or optional fresh stages; `tiny` and `substantive` remain advisory metadata only.
-3. Allows optional leaf workers without recommending them, then returns their results to the owner for one consolidated review, direct fixes, exact-candidate verification, and PR creation.
-4. Stops at an open, unmerged `pr_ready` result with no production mutation.
-5. Promotes only through a fresh release task—started manually with `release`, or automatically after `pr_ready` when the current command explicitly selects `ship`.
+1. Treats a complete approved artifact as the implementation input and discovers the real release path early for `ship`.
+2. Keeps one accountable owner in the invoking task; optional helpers are terminal leaves and never own merge or production.
+3. Consolidates implementation, review, direct fixes, exact-candidate verification, and PR creation once.
+4. Ends `pr` at open, unmerged `pr_ready`; for `ship`, that receipt is only an internal admission handoff.
+5. Ends `ship` and `release` only as production-proven `released` or honestly `blocked`—never at PR readiness or merge-only.
 
-An independent Codex task is not a collaboration subagent. Auto Pilot does not prescribe agent teams, worker counts, or wave cadence. If an owner independently chooses collaboration, every helper is a terminal leaf that must not spawn, fork, create another task, or delegate. A fresh stage owner may itself be a child task and may still choose its own leaves. Mechanical inventory and verification belong in deterministic repository scripts or bounded tool calls.
+An independent Codex task is not a collaboration subagent. Auto Pilot does not prescribe agent teams, worker counts, or wave cadence. If an owner independently chooses collaboration, every helper is a terminal leaf that must not spawn, fork, create another task, delegate, merge, deploy, migrate, roll back, or own production. Mechanical inventory and verification belong in deterministic repository scripts or bounded tool calls.
 
 ## Execution topology
 
-The normal path is one accountable Sol owner completing the PR stage in its
-current session. Context separation is an owner-selected scaling pattern, not a
-mandatory classifier result. Native compaction stays inside the same session;
-creating a new session creates a new owner stage.
+The normal path is one accountable Sol owner completing the command in its
+current task. Native compaction stays inside that task. Optional collaboration
+may help with bounded implementation packets, but responsibility never leaves
+the invoking owner.
 
 ```mermaid
 flowchart TB
-    START["User<br/>$auto-pilot pr or ship approved-plan.md"] --> OWNER
-
-    subgraph PR["PR stage — accountable Sol owner"]
-        OWNER["Read approved goal<br/>Bind repository truth"]
-        DIRECT["Implement in current session"]
-        REVIEW["One consolidated review<br/>Patch and exact-candidate checks"]
-        OPEN["Commit, push, and open PR"]
-
-        OWNER --> DIRECT --> REVIEW --> OPEN
-    end
-
-    STAGE["Optional fresh owner stage<br/>Same goal, compact Git handoff"]
-    LEAF["Optional terminal leaf worker<br/>Must not spawn or delegate"]
-    STAGE_LEAF["Optional terminal leaf<br/>Must not spawn or delegate"]
-
-    OWNER -.-> STAGE
-    OWNER -.-> LEAF
-    STAGE -.-> STAGE_LEAF
-    LEAF -->|"Return bounded result"| OWNER
-    STAGE_LEAF -->|"Return bounded result"| STAGE
-    STAGE -->|"Repository state + compact handoff"| REVIEW
-
-    OPEN --> CONTINUE{"Release continuation authorized?"}
-    CONTINUE -->|"No: pr"| READY["Open, unmerged PR<br/>pr_ready"]
-    CONTINUE -->|"Yes: ship"| RELEASE["Fresh Sol release task<br/>Live candidate → merge → proof"]
-    READY -.-> RELEASE
+    START["User command"] --> MODE{"pr, ship, or release?"}
+    MODE -->|"pr / ship"| BUILD["Current accountable task<br/>Implement → review → exact candidate → PR"]
+    LEAF["Optional terminal leaf<br/>No merge, deploy, or delegation"] -.->|"Bounded result"| BUILD
+    BUILD --> BOUNDARY{"Requested boundary"}
+    BOUNDARY -->|"pr"| READY["Open, unmerged PR<br/>terminal pr_ready"]
+    BOUNDARY -->|"ship"| ADMIT["Internal pr_ready receipt<br/>Single-use admission"]
+    MODE -->|"release existing PR"| ADMIT
+    ADMIT --> MERGE["Protected merge"]
+    MERGE --> DEPLOY["Repository release owner"]
+    DEPLOY --> PROOF["Exact production capability proof"]
+    PROOF --> RELEASED["terminal released"]
+    ADMIT -.->|"Genuine blocker"| BLOCKED["terminal blocked"]
+    MERGE -.->|"Reconcile + one bounded recovery fails"| BLOCKED
+    DEPLOY -.->|"Cannot prove production"| BLOCKED
 ```
 
 | Execution shape | When used | Ownership |
 |---|---|---|
 | Direct | Owner can reliably finish in the current context | Current Sol owner |
-| Fresh owner stage | Owner judges clean context separation useful | New Sol owner stage |
 | Leaf worker | Any owner independently judges a bounded packet useful | Terminal leaf; no delegation |
-| Release task | Explicit `ship` or later `release` authority | Fresh Sol release owner |
+| `pr` boundary | User requests a verified unmerged PR | Current Sol owner ends at `pr_ready` |
+| `ship` boundary | User requests implementation through production | Same Sol owner ends at `released` or `blocked` |
+| Direct `release` | User requests promotion of an existing PR | Current Sol owner ends at `released` or `blocked` |
 
-Fresh-stage handoffs contain the approved goal, Git identities, completed and
-remaining outcomes, changed paths, check evidence, risks, and blockers—not
-copied conversation history or hidden reasoning. A continuation stage is a new
-owner stage, not a failure. `ship` likewise does not carry the PR conversation
-into release: it creates one fresh single-use task for a qualified PR head. If
-that exact attempt is already active, it is identified without another prompt;
-a terminal release task is never resumed.
+Helper handoffs contain the approved goal, Git identities, bounded outcomes,
+changed paths, check evidence, risks, and blockers—not copied conversation
+history or hidden reasoning. A `ship` internal receipt binds the qualified PR
+head to the same accountable task; it is not a user-visible continuation. A
+terminal `released` or `blocked` release attempt is sealed and never resumed.
 
 ## Install
 
@@ -139,7 +126,7 @@ Preferences resolve in this order: current invocation flags, optional user confi
 
 Invocation overrides are `--implementation-executor`, `--implementation-model`, `--implementation-thinking`, `--release-model`, `--release-thinking`, `--collaboration`, `--collaboration-model`, and `--collaboration-thinking`. See the full [configuration reference](skills/auto-pilot/references/configuration.md).
 
-`auto` leaves execution-shape selection with the accountable owner; it does not actively recommend a task or agent team. `task`, `direct`, and `subagent` remain explicit overrides. Collaboration `auto` only makes leaf workers available if an owner independently chooses them. Every leaf is terminal and may not delegate. If a fresh release task interface is unavailable, the PR owner stops at `pr_ready` and returns the exact `$auto-pilot release <PR URL>` command; it never releases in place.
+`auto` leaves execution-shape selection with the accountable owner; it does not actively recommend an agent team. `task`, `direct`, and `subagent` remain implementation preferences, but they cannot transfer the terminal promise of `ship`. Collaboration `auto` only makes leaf workers available if the owner independently chooses them. Every leaf is terminal and may not delegate or own merge, deploy, migration, rollback, or production. Release model preferences never create a release handoff.
 
 ## Delivery modes
 
@@ -149,7 +136,7 @@ PR mode is the default, but the explicit form is preferred:
 $auto-pilot pr docs/approved-plan.md
 ```
 
-It stops with an open, unmerged, production-ready PR and no production mutation.
+It stops with an open, unmerged, production-ready PR and no production mutation. Its only successful terminal state is `pr_ready`.
 
 Ship mode is the one-command PR-to-production lane:
 
@@ -157,24 +144,24 @@ Ship mode is the one-command PR-to-production lane:
 $auto-pilot ship docs/approved-plan.md
 ```
 
-An equally clear current instruction such as “finish this and release it” may be normalized to `ship`. Auto Pilot still completes the PR stage first. Readiness requires promotable PASS exact-candidate evidence and current required CI for the live head. It then creates one fresh single-use release task, binds the task to the live head plus source-receipt and installed-contract SHA-256 values, and ends the PR controller. An already-active exact attempt is not prompted twice; a terminal one is never resumed. Questions, hypotheticals, future wishes, quoted examples, prior-chat intent, and negated release requests never select this mode.
+An equally clear current instruction such as “finish this and release it” may be normalized to `ship`. Auto Pilot discovers and preflights the real production or public-distribution path before merge, completes the PR stage, and stores the validated `pr_ready` receipt as an internal single-use admission input. The same accountable task binds the live base and head plus source-receipt and installed-contract SHA-256 values, merges through the normal protected path, runs the repository release owner, waits for rollout, and proves the exact production capability. Questions, hypotheticals, future wishes, quoted examples, prior-chat intent, and negated release requests never select this mode.
 
-Release mode requires a new explicit invocation that identifies an existing PR:
+Release mode requires an explicit current invocation that identifies an existing PR:
 
 ```text
 $auto-pilot release https://github.com/owner/repo/pull/123
 ```
 
-It starts from the live candidate and validates one bounded admission packet before merge. The release task treats that candidate as immutable: it cannot edit source, create a commit or branch, open another PR, or repair CI/release tooling. Unless the user or repository declares another bound before promotion, the whole release-control task has a 10-minute wall-clock budget from live-PR binding; an unsafe in-flight mutation still reaches its next repository-defined safe boundary. It merges through the repository's normal protected path, uses the discovered release mechanism, handles approved migrations or backfills, and verifies each affected capability through its exact production actor, credential, scope, runtime principal, representative data, and terminal outcome. It then publishes canonical release notes and ends every `released` response with a compact release message linked to them. Live canaries are release-only and impact-selected; they are never run on every edit or commit. If the repository has no release mechanism, it stops after merging. A validated `pr_ready` receipt is required evidence, never release authority by itself.
+It starts from the live candidate and validates one bounded admission packet before merge. If no valid prior `pr_ready` receipt is available, the current task builds a fresh read-only receipt from the live exact candidate; a missing artifact from another task is not itself a blocker. Release mode treats the candidate as immutable: it cannot edit source, create a commit or branch, open another PR, or repair CI or release tooling. It imposes no arbitrary whole-task timer: CI, deploy, and observation are awaited with bounded status reads or the product wait mechanism. It merges through the repository's normal protected path, uses the discovered release mechanism, handles approved migrations or backfills, and verifies each affected capability through its exact production actor, credential, scope, runtime principal, representative data, artifact, and terminal outcome. Live canaries are release-only and impact-selected; they are never run on every edit or commit. If no production or distribution path exists, it blocks before merge.
 
-Each session reports one terminal state: the PR controller reports `pr_ready` or `blocked`; the fresh release controller reports `merged_main`, `released`, or `blocked`. Any terminal release result permanently seals that task against later production mutation. Its completion receipt records plan, Git, criteria, checks, PR/release evidence, exact release capability reachability, contract/source bindings, complete-task timing, and blockers without copying model reasoning. A successful deployment with missing reachability proof remains `blocked`, not `released`.
+`pr` reports `pr_ready` or `blocked`. `ship` and `release` report only `released` or `blocked`; an open PR, merge, deploy start, and successful deploy without production proof are not success. Any terminal release result permanently seals that attempt against later production mutation. Its schema-v8 completion receipt records plan, Git, exact candidate, PR/release evidence, contract/source bindings, exact capability reachability, and structured blockers without copying model reasoning.
 
-After a successful merge or release, Auto Pilot automatically closes the
-task-owned local workspace: it verifies the worktree is clean, unlocked,
-merged, pushed, and reachable from the remote base; removes it with Git from
-outside the target directory; prunes stale metadata; and safe-deletes the task
-branch. Remote-branch deletion remains subject to repository policy. It never
-force-removes a worktree; an unsafe or failed cleanup makes the run `blocked`.
+After a release, Auto Pilot attempts to close the task-owned local workspace:
+it verifies clean, unlocked, merged, pushed, and reachable state; removes it
+with Git from outside the target directory; prunes stale metadata; and safely
+deletes task branches when policy permits. It never force-removes a worktree.
+Release-note or local-cleanup failure remains a visible closeout warning; it
+cannot rewrite an already production-proven release as `blocked`.
 
 ## Local run history
 
@@ -201,7 +188,7 @@ The archive lives at `~/.codex-auto-pilot/history` by default. Override it with 
 
 ## Is this topology optimal?
 
-It is the current **owner-decided reference topology**, not a universal or statistically proven optimum. It preserves three non-negotiable constraints: one accountable owner for each active stage, terminal leaf workers that never delegate, and a fresh production-authority boundary. It does not force context separation merely because scope metadata says `substantive`. Automatic `ship` removes a user round trip without merging the PR and release contexts.
+It is the current **owner-decided reference topology**, not a universal or statistically proven optimum. It preserves three non-negotiable constraints: one accountable owner for the requested terminal outcome, terminal leaf workers that never delegate or own production, and an immutable single-use admission boundary before mutation. It does not force collaboration merely because scope metadata says `substantive`. `ship` removes both the user round trip and the ownership gap while retaining a deterministic PR-to-release contract boundary.
 
 Verify it from receipt-backed local history rather than intuition:
 
@@ -211,7 +198,7 @@ Verify it from receipt-backed local history rather than intuition:
 4. Reject a cheaper topology if it increases escaped defects, incomplete scope, repeated repair loops, or unsafe release outcomes.
 5. Promote a routing change only after several comparable successful runs show a repeatable improvement; never infer causality from one unusually small task.
 
-The collector's benchmark cohort excludes legacy or unverified outcomes. Fresh user-visible owner stages are grouped only when the dispatching routing marker and receiving invocation share the same opaque goal ID. Collaboration-agent tokens remain separate and unverified in schema v4 because child JSONL may replay parent history; those runs stay outside token-cost cohorts until semantic replay deduplication is proven.
+The collector exposes a receipt-valid delivery cohort and a stricter benchmark cohort that additionally requires passed same-task routing plus one exact skill-bundle hash. It reports bundle cohorts separately and marks cross-bundle results incomparable. Fresh PR-only owner stages are grouped only when the dispatching routing marker and receiving invocation share the same opaque goal ID. Collaboration-agent tokens remain separate and unverified because child JSONL may replay parent history; those runs stay outside token-cost cohorts until semantic replay deduplication is proven.
 
 ## Privacy and safety
 
@@ -230,7 +217,7 @@ The collector's benchmark cohort excludes legacy or unverified outcomes. Fresh u
 - Repository instructions, deterministic checks, branch protection, and production safety still apply.
 - Auto Pilot does not invent a deployment, migration, backfill, or rollback mechanism when the repository has none.
 - Model and tool availability depend on the active Codex runtime.
-- Automatic `ship` requires the runtime to create a separate task. If unavailable, Auto Pilot returns the exact manual `release` command and never falls back to same-session production mutation.
+- `ship` requires the invoking task to retain production ownership through terminal proof; task/thread creation is neither required nor a reason to stop.
 - Codex transcript JSONL is not a stable public schema. The collector references the original local file and independently versions marker, parser, and materializer schemas so available evidence can be rebuilt.
 
 ## Contributing and security

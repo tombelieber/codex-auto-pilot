@@ -1,6 +1,6 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Deliver approved plans through verified PR and release stages with canonical release notes.",
   "author": { "name": "tombelieber", "url": "https://github.com/tombelieber" },
   "homepage": "https://github.com/tombelieber/codex-auto-pilot",
@@ -11,13 +11,13 @@
   "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Codex Auto Pilot",
-    "shortDescription": "Build a verified PR and close releases with notes",
-    "longDescription": "Keeps one accountable Sol owner in control, lets that owner finish directly or choose optional fresh stages and terminal leaf workers, and preserves a separate production-authority boundary. Released runs require canonical notes and a final linked release message; merged task worktrees are removed automatically only after fail-closed safety checks.",
+    "shortDescription": "Build a verified PR or stay through production",
+    "longDescription": "Keeps one accountable Sol owner in the invoking task. PR mode ends at a verified unmerged PR; ship and release continue through protected merge, deployment or distribution, and exact production proof, ending only as released or blocked. Optional helpers remain terminal leaves and never own production.",
     "developerName": "tombelieber",
     "category": "Productivity",
     "capabilities": ["Write", "Git", "Release"],
     "websiteURL": "https://github.com/tombelieber/codex-auto-pilot",
-    "defaultPrompt": ["$auto-pilot pr <approved-plan-path>. Use ship instead when I explicitly want Auto Pilot to create a fresh release task immediately after the PR becomes ready."],
+    "defaultPrompt": ["$auto-pilot pr <approved-plan-path>. Use ship instead when I explicitly want the same accountable task to continue through production proof."],
     "brandColor": "#2563EB"
   }
 }

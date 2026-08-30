@@ -45,14 +45,14 @@ checked automatic cleanup policy than Mole:
 | State | Worktree action |
 |---|---|
 | PR open or release incomplete | Keep it. |
-| PR merged / release shipped | Automatically remove only the task-owned worktree after proving it clean, unlocked, pushed, and reachable from the remote base; otherwise report `blocked`. |
+| PR merged / release shipped | Attempt removal only for the task-owned worktree after proving it clean, unlocked, pushed, and reachable from the remote base; otherwise retain it and report a closeout warning. |
 | Cleanup eligible | Persist evidence outside the target, run from the primary checkout, use `git worktree remove <path>` rather than raw filesystem deletion, prune metadata, and safe-delete branches.[^git-worktree][^mole-worktree] |
 | Directory is already missing | `git worktree prune` may remove stale administrative metadata; it is not the command for deciding or deleting a live worktree.[^git-worktree] |
 
-This still separates two facts—**delivery reached production** and **local
-workspace cleanup passed**—but Auto Pilot requires both before its terminal
-result can be `released`. If cleanup fails after production is live, the run is
-`blocked` and must report both truths.
+This separates two facts—**delivery reached production** and **local workspace
+cleanup passed**. Production proof controls `released`; if cleanup fails after
+production is live, retain the workspace and report the closeout warning rather
+than rewriting production truth as `blocked`.
 
 ### Release completion gates
 
@@ -64,7 +64,7 @@ An Auto Pilot run should report `released` only after all applicable items are t
 4. The repository release note is published in its established format.
 5. The final AI response ends with the compact release block below.
 
-If the repository has no release mechanism, report `merged_main`; if a release exists but its note or post-release proof is missing, report `blocked` or the repository’s equivalent unqualified state, not `released`.
+If the repository has no production or public-distribution mechanism, report `blocked` before merge. Missing production proof remains `blocked`; a missing note after exact production proof is a visible closeout warning, not a merge-only terminal state.
 
 ### Mandatory final-response suffix after a release
 
