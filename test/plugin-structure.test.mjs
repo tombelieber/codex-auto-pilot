@@ -20,6 +20,17 @@ test('Auto Pilot is explicit-only and exposes a valid skill path', async () => {
   assert.match(agent, /allow_implicit_invocation:\s*false/)
 })
 
+test('public install instructions use the tagged GitHub distribution', async () => {
+  const packageMetadata = JSON.parse(await read('package.json'))
+  const [readme, installer] = await Promise.all([read('README.md'), read('install.sh')])
+  assert.equal(
+    readme.includes(`npx --yes --allow-git=all github:tombelieber/codex-auto-pilot#v${packageMetadata.version} install`),
+    true,
+  )
+  assert.doesNotMatch(readme, /From npm|npx codex-auto-pilot install/)
+  assert.match(installer, /npx --yes --allow-git=all github:tombelieber\/codex-auto-pilot install/)
+})
+
 test('plugin hooks collect lifecycle evidence without adding model context', async () => {
   const hooks = JSON.parse(await read('hooks/hooks.json'))
   assert.deepEqual(Object.keys(hooks.hooks).sort(), ['SessionEnd', 'Stop', 'SubagentStop', 'UserPromptSubmit'].sort())

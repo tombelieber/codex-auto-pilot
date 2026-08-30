@@ -63,10 +63,10 @@ Supplying that input resumes the same task.
 
 ## Install
 
-From npm:
+From the current tagged GitHub release:
 
 ```bash
-npx codex-auto-pilot install
+npx --yes --allow-git=all github:tombelieber/codex-auto-pilot#v0.13.1 install
 ```
 
 From this checkout:

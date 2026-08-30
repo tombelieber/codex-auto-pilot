@@ -1,6 +1,6 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Owner-directed delivery to fully release-ready PRs or verified production with zero scoped leftovers.",
   "bin": {
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
