@@ -1,6 +1,6 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Deliver approved goals to fully release-ready PRs or verified production with zero scoped leftovers.",
   "author": { "name": "tombelieber", "url": "https://github.com/tombelieber" },
   "homepage": "https://github.com/tombelieber/codex-auto-pilot",
