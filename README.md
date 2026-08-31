@@ -25,6 +25,11 @@ starting from an existing candidate. They do not create a third goal mode.
 implementation, review, tests, PR, exact-candidate admission, protected merge,
 release/deployment, production proof, applicable notes, and safe cleanup.
 
+Before implementation, Auto Pilot uses the bundled `batch-grill-me` skill when
+the plan leaves any user decision open. It resolves repository facts itself,
+asks every currently unblocked decision frontier, writes the confirmed result
+back into the plan, and starts only after the user confirms shared understanding.
+
 ```text
 approved goal
    |
@@ -66,7 +71,7 @@ Supplying that input resumes the same task.
 From the current tagged GitHub release:
 
 ```bash
-npx --yes --allow-git=all github:tombelieber/codex-auto-pilot#v0.13.3 install
+npx --yes --allow-git=all github:tombelieber/codex-auto-pilot#v0.14.0 install
 ```
 
 From this checkout:
@@ -87,9 +92,9 @@ Replace an older installed copy safely:
 node bin/codex-auto-pilot.mjs install --force
 ```
 
-The installer writes only the Auto Pilot skill under the selected agent home.
-It refuses collisions by default and creates a backup before `--force` replaces
-an existing copy.
+The installer writes the Auto Pilot skill and its thin `batch-grill-me` hard
+dependency under the selected agent home. It refuses collisions by default and
+creates a backup before `--force` replaces an existing copy.
 
 Verify:
 
@@ -154,6 +159,11 @@ The invoking task may work directly or use bounded terminal helpers. Helpers
 cannot spawn, fork, create another owner task, delegate, merge, deploy, migrate,
 roll back, or own production. Native compaction is the supported continuation
 mechanism.
+
+The owner model and effort inherit the invoking session selected by the user.
+Optional configuration can prefer another model for substantive implementation
+helpers, but the owner decides whether direct, single-helper, or safe parallel
+execution is fastest for the actual plan.
 
 Optional settings live at `~/.codex-auto-pilot/config.json`. Invocation flags
 override user config, which overrides defaults. Existing `release.*` settings

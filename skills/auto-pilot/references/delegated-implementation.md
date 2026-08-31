@@ -20,6 +20,20 @@ for compatibility but cannot create a current-contract owner task. If the
 preferred interface is unavailable, disclose the fallback and continue in the
 invoking task when it meets the capability floor.
 
+The owner evaluates the approved plan and repository truth before choosing:
+
+- work directly for a small cohesive change, high file/state overlap, or work
+  whose integration cost exceeds the likely time saved;
+- use one substantive implementation helper when the packet has a clear file
+  boundary and acceptance proof; or
+- run independent read-only or non-overlapping packets in parallel when they can
+  return evidence without coordinating mutable state.
+
+The user's invoking-session model and effort own the goal. Configured helper
+models are preferences only; `inherit` requests no override. Do not spawn a
+helper merely to satisfy a topology preference, and do not create separate
+owner stages. Dependent work remains ordered phases inside this same task.
+
 Optional helpers must receive a narrow packet:
 
 - exact objective and acceptance boundary;

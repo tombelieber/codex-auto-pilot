@@ -61,8 +61,25 @@ successful deployment without exact production proof is never `SHIPPED`.
 
 Read [configuration](references/configuration.md) and run its resolver once for
 a real invocation. Invocation flags override optional user config, which
-overrides defaults. Preferences never transfer goal ownership. State the
-resolved implementation preference and target end state in one concise update.
+overrides inherited-session defaults. The invoking owner uses the model and
+effort the user selected for that session. Preferences may guide bounded helpers
+but never transfer goal ownership. State the resolved implementation preference
+and target end state in one concise update.
+
+## Make the approved plan complete before implementation
+
+Treat an approved plan as incomplete when scope, acceptance, production
+regression, migration or data preservation, rollout order, dry-run, rollback,
+production proof, or required authority still depends on a user decision. Invoke
+the bundled `$batch-grill-me` hard dependency and work every currently unblocked
+decision frontier, round by round. Find repository and environment facts
+yourself. Write the confirmed answers back into the approved plan and do not
+start implementation until the frontier is empty and the user confirms shared
+understanding.
+
+A clear technical defect with an already-approved outcome remains the owner's
+implementation work; fix it without interviewing the user. Grill only when the
+problem exposes an unresolved decision or invalidates the approved plan.
 
 ## Build one release-ready candidate
 
@@ -90,6 +107,10 @@ resolved implementation preference and target end state in one concise update.
    disable working production behavior or strand valid data to make a gate pass.
    Pause only for genuine authority, credential, destructive-data, billing,
    incompatible migration, safety, or ambiguous-remote-state decisions.
+   Those decisions belong in `$batch-grill-me` before readiness. Any known
+   defect, missing evidence, changed candidate/base/scope, or unresolved decision
+   means the candidate is not `PR_READY`; repair or resolve it and rerun the
+   complete affected qualification before declaring readiness again.
 5. For `pr`, validate a schema-v10 `PR_READY` receipt and stop before merge. For
    `ship`, treat readiness as an internal transition and continue immediately.
 
@@ -150,7 +171,7 @@ An achieved receipt has `goal.achieved` equal to `PR_READY` or `SHIPPED`,
 Append one routing marker and the receipt marker:
 
 ```text
-<!-- auto-pilot-routing: {"goal_id":"apg_...","implementation":{"lane":"direct","task_ref":null,"worktree":null,"model":"gpt-5.6-sol","thinking":"xhigh","reason":"The invoking task remained accountable."},"continuation":{"lane":"current_ship_task","task_ref":null,"worktree":null,"model":"gpt-5.6-sol","thinking":"xhigh","reason":"The same task continued through production."}} -->
+<!-- auto-pilot-routing: {"goal_id":"apg_...","implementation":{"lane":"direct","task_ref":null,"worktree":null,"model":"<actual-model>","thinking":"<actual-effort>","reason":"The invoking task remained accountable."},"continuation":{"lane":"current_ship_task","task_ref":null,"worktree":null,"model":"<actual-model>","thinking":"<actual-effort>","reason":"The same task continued through production."}} -->
 <!-- auto-pilot-receipt: /absolute/path/to/receipt.json -->
 ```
 

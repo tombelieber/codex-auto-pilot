@@ -33,6 +33,13 @@ transition inside `ship`:
 6. Record a passed `production-release-ready` check and an exact completion
    inventory. Nothing may remain except the protected production action.
 
+Readiness is a current evidence claim, not a permanent label. Any known defect,
+missing proof, changed base/head/scope, or unresolved user decision means the
+candidate is not `PR_READY`. Return to mutable preparation, use
+`$batch-grill-me` when a decision is missing, and rerun complete affected
+qualification before recording readiness again. Never repair code while a
+production mutation attempt is in progress.
+
 For `pr`, that proves `PR_READY` and no merge occurs. For `ship`, keep it as an
 internal artifact and continue; it is not a final answer.
 

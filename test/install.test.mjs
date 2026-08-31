@@ -18,6 +18,8 @@ function fixture() {
   writeFileSync(join(sourceRoot, 'skills', 'auto-pilot', 'nested', 'rule.txt'), 'safe\n')
   mkdirSync(join(sourceRoot, 'skills', 'auto-pilot', 'scripts'))
   writeFileSync(join(sourceRoot, 'skills', 'auto-pilot', 'scripts', 'collect_history.mjs'), 'process.stdout.write("{}\\n")\n')
+  mkdirSync(join(sourceRoot, 'skills', 'batch-grill-me'), {recursive: true})
+  writeFileSync(join(sourceRoot, 'skills', 'batch-grill-me', 'SKILL.md'), '# Batch Grill Me\n')
   return {root, sourceRoot, home, cleanup: () => rmSync(root, {recursive: true, force: true})}
 }
 
@@ -25,18 +27,27 @@ test('dry-run writes nothing', () => {
   const f = fixture()
   try {
     const result = install({sourceRoot: f.sourceRoot, home: f.home, dryRun: true})
-    assert.equal(result.items.filter((item) => item.status === 'would install').length, 1)
+    assert.equal(result.items.filter((item) => item.status === 'would install').length, 2)
     assert.equal(existsSync(f.home), false)
   } finally { f.cleanup() }
 })
 
-test('installs only the skill', () => {
+test('installs Auto Pilot and its Batch Grill hard dependency only', () => {
   const f = fixture()
   try {
     const result = install({sourceRoot: f.sourceRoot, home: f.home})
-    assert.equal(result.items.filter((item) => item.status === 'installed').length, 1)
+    assert.equal(result.items.filter((item) => item.status === 'installed').length, 2)
     assert.equal(readFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'utf8'), '# Auto Pilot\n')
+    assert.equal(readFileSync(join(f.home, '.agents', 'skills', 'batch-grill-me', 'SKILL.md'), 'utf8'), '# Batch Grill Me\n')
     assert.equal(existsSync(join(f.home, '.codex', 'agents')), false)
+  } finally { f.cleanup() }
+})
+
+test('installs the hard dependency before the Auto Pilot skill', () => {
+  const f = fixture()
+  try {
+    const {items} = resolvePaths({sourceRoot: f.sourceRoot, home: f.home})
+    assert.deepEqual(items.map((item) => item.name), ['batch-grill-me-skill', 'auto-pilot-skill'])
   } finally { f.cleanup() }
 })
 
@@ -51,6 +62,7 @@ test('the repository installer includes current routing files', () => {
       'scripts/resolve_config.mjs',
       'scripts/history-routing.mjs',
     ]) assert.equal(existsSync(join(skill, path)), true)
+    assert.equal(existsSync(join(home, '.agents', 'skills', 'batch-grill-me', 'SKILL.md')), true)
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
@@ -107,7 +119,7 @@ test('repeat install skips identical skill and never touches config.toml', () =>
     writeFileSync(config, 'model = "private-value"\n')
     install({sourceRoot: f.sourceRoot, home: f.home})
     const repeated = install({sourceRoot: f.sourceRoot, home: f.home})
-    assert.equal(repeated.items.filter((item) => item.status === 'skipped').length, 1)
+    assert.equal(repeated.items.filter((item) => item.status === 'skipped').length, 2)
     assert.equal(readFileSync(config, 'utf8'), 'model = "private-value"\n')
   } finally { f.cleanup() }
 })
@@ -116,10 +128,10 @@ test('doctor reports current or mismatched skill without reading config.toml', (
   const f = fixture()
   try {
     install({sourceRoot: f.sourceRoot, home: f.home})
-    assert.equal(resolvePaths({sourceRoot: f.sourceRoot, home: f.home}).items.length, 1)
-    assert.equal(doctor({sourceRoot: f.sourceRoot, home: f.home}).items[0].status, 'current')
+    assert.equal(resolvePaths({sourceRoot: f.sourceRoot, home: f.home}).items.length, 2)
+    assert.equal(doctor({sourceRoot: f.sourceRoot, home: f.home}).items.find((item) => item.name === 'auto-pilot-skill').status, 'current')
     writeFileSync(join(f.home, '.agents', 'skills', 'auto-pilot', 'SKILL.md'), 'corrupt\n')
-    assert.equal(doctor({sourceRoot: f.sourceRoot, home: f.home}).items[0].status, 'mismatch')
+    assert.equal(doctor({sourceRoot: f.sourceRoot, home: f.home}).items.find((item) => item.name === 'auto-pilot-skill').status, 'mismatch')
   } finally { f.cleanup() }
 })
 

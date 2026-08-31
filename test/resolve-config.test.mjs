@@ -22,6 +22,11 @@ test('config resolver uses portable defaults when no config or invocation overri
     assert.deepEqual(resolved.implementation, DEFAULT_AUTO_PILOT_SETTINGS.implementation)
     assert.deepEqual(resolved.release, DEFAULT_AUTO_PILOT_SETTINGS.release)
     assert.deepEqual(resolved.collaboration, DEFAULT_AUTO_PILOT_SETTINGS.collaboration)
+    assert.deepEqual(resolved.implementation, {
+      substantive_executor: 'auto', model: 'inherit', thinking: 'inherit',
+    })
+    assert.deepEqual(resolved.release, {model: 'inherit', thinking: 'inherit'})
+    assert.deepEqual(resolved.collaboration, {policy: 'auto', model: 'inherit', thinking: 'inherit'})
     assert.deepEqual(resolved.source, {
       config_path: f.config,
       config_loaded: false,
@@ -72,6 +77,9 @@ test('routing flags are deterministic and reject empty or duplicate values', () 
     configPath: '/tmp/codex-auto-pilot-no-config.json',
     prompt: '$auto-pilot pr --release-thinking impossible',
   }), /release.thinking must be one of/)
+  assert.deepEqual(parseInvocationOverrides(
+    '$auto-pilot pr --implementation-model inherit --implementation-thinking inherit',
+  ), {implementation: {model: 'inherit', thinking: 'inherit'}})
 })
 
 test('a UI skill selection may precede the invocation flags on the next line', () => {

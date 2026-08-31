@@ -253,7 +253,7 @@ ${routingMarker({
     assert.equal(manifest.goal_outcome, null)
     assert.equal(manifest.goal_mode, 'ship')
     assert.deepEqual(manifest.routing_config.implementation, {
-      substantive_executor: 'auto', model: 'gpt-5.6-sol', thinking: 'xhigh',
+      substantive_executor: 'auto', model: 'inherit', thinking: 'inherit',
     })
     assert.match(manifest.skill_bundle_sha256, /^[a-f0-9]{64}$/)
     assert.ok(Object.keys(manifest.skill_bundle_files).includes('SKILL.md'))

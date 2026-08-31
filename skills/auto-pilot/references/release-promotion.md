@@ -11,8 +11,10 @@ directly causal readiness work first, then bind the exact mutation attempt.
    base/head, required checks/reviews, mergeability, affected production
    surfaces, and repository release owner.
 2. Prove the candidate satisfies the complete PR_READY gate. If a deterministic
-   in-scope defect is repairable before mutation, fix it in this task and
-   requalify the new head.
+   in-scope defect exists before mutation, the candidate is not ready. End that
+   admission attempt, return to mutable preparation in this task, fix it, and
+   requalify the new head before release. If the defect exposes an unresolved
+   user decision, complete `$batch-grill-me` and update the approved plan first.
    When migration applies, the gate must include `production-data-compatibility`
    evidence from representative data at the currently supported production
    version. The exact candidate must discover and read it, write it when the
@@ -75,6 +77,9 @@ prove both allowed and denied principals at the actual boundary.
   external state before creating another linked attempt.
 - After mutation begins, reconcile actual remote state before any retry. Use
   only the repository-defined bounded recovery for the unchanged admitted plan.
+- Do not edit code, redefine scope, or improvise a new migration or rollout in
+  the production phase. If the admitted plan cannot complete, execute only its
+  predefined bounded rollback or recovery and keep the goal incomplete.
 - Never retry authentication, authorization, checksum, contract, candidate,
   scope, source-integrity, or safety failures without changed evidence.
 - Waiting and failure remain resumable in this task. No response seals the task

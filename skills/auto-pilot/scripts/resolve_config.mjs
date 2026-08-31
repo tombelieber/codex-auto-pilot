@@ -10,23 +10,23 @@ export const CONFIG_SCHEMA_VERSION = 1
 export const DEFAULT_AUTO_PILOT_SETTINGS = Object.freeze({
   implementation: Object.freeze({
     substantive_executor: 'auto',
-    model: 'gpt-5.6-sol',
-    thinking: 'xhigh',
+    model: 'inherit',
+    thinking: 'inherit',
   }),
   release: Object.freeze({
-    model: 'gpt-5.6-sol',
-    thinking: 'xhigh',
+    model: 'inherit',
+    thinking: 'inherit',
   }),
   collaboration: Object.freeze({
     policy: 'auto',
-    model: 'gpt-5.6-luna',
-    thinking: 'max',
+    model: 'inherit',
+    thinking: 'inherit',
   }),
 })
 
 const EXECUTORS = new Set(['task', 'direct', 'subagent', 'auto'])
 const COLLABORATION_POLICIES = new Set(['auto', 'off'])
-const THINKING_LEVELS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+const THINKING_LEVELS = new Set(['inherit', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
 const MAX_CONFIG_BYTES = 64 * 1024
 const DEFAULT_CONFIG_PATH = () => join(homedir(), '.codex-auto-pilot', 'config.json')
 const LEADING_SKILL_SELECTION = /^\s*\[\$auto-pilot\]\([^)]+\)\s*/i

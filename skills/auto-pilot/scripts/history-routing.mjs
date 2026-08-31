@@ -203,14 +203,18 @@ function leafDepthEvidence(subagents) {
 function preferenceFallback(value, expected, label, deviations) {
   if (!expected) return false
   const mismatches = []
-  if (value.model !== expected.model) mismatches.push('model')
-  if (value.thinking !== expected.thinking) mismatches.push('thinking')
+  if (!inherits(expected.model) && value.model !== expected.model) mismatches.push('model')
+  if (!inherits(expected.thinking) && value.thinking !== expected.thinking) mismatches.push('thinking')
   if (!mismatches.length) return false
   if (!value.reason) {
     deviations.push(`${label} ${mismatches.join('/')} differs from resolved preference without a fallback reason`)
     return false
   }
   return true
+}
+
+function inherits(value) {
+  return value === undefined || value === null || value === 'inherit'
 }
 
 function createdThreadReferences(message) {

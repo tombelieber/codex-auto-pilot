@@ -5,6 +5,7 @@ import test from 'node:test'
 const intended = [
   '.codex-plugin/plugin.json', 'LICENSE', 'README.md', 'bin/codex-auto-pilot.mjs', 'install.sh', 'lib/installer.mjs', 'package.json',
   'hooks/hooks.json', 'lib/hooks-installer.mjs',
+  'skills/batch-grill-me/SKILL.md',
   'skills/auto-pilot/SKILL.md', 'skills/auto-pilot/agents/openai.yaml', 'skills/auto-pilot/references/configuration.md', 'skills/auto-pilot/references/history-schema.md',
   'skills/auto-pilot/references/receipt-schema.md', 'skills/auto-pilot/references/automatic-promotion.md',
   'skills/auto-pilot/references/delegated-implementation.md',
