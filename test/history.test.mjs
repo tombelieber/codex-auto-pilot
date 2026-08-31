@@ -15,7 +15,7 @@ import {
   pruneExpiredRaw,
   setRawRetention,
 } from '../skills/auto-pilot/scripts/history.mjs'
-import {goalId, incompleteReceipt, prReadyReceipt} from './v9-fixture.mjs'
+import {goalId, incompleteReceipt, prReadyReceipt} from './v10-fixture.mjs'
 
 function jsonl(...events) { return `${events.map((event) => JSON.stringify(event)).join('\n')}\n` }
 function tokens(input, cached, output, reasoning, total) {
@@ -292,7 +292,7 @@ ${routingMarker({
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
 
-test('a valid v9 PR_READY receipt remains authoritative when routing metadata is missing', async () => {
+test('a valid current PR_READY receipt remains authoritative when routing metadata is missing', async () => {
   const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-history-routing-unknown-'))
   const dataRoot = join(root, 'data')
   const transcript = join(root, 'root.jsonl')
