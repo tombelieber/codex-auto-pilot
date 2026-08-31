@@ -1,7 +1,8 @@
 # Auto Pilot configuration
 
 Configuration selects execution preferences; it cannot change goal authority,
-end states, evidence requirements, or same-task ownership.
+end states, evidence requirements, or same-task ownership. The owner model and
+effort inherit the invoking session selected by the user.
 
 Run once at the start of a real invocation, forwarding only flags explicitly
 present in that command:
@@ -19,20 +20,44 @@ default path is `~/.codex-auto-pilot/config.json`; set
   "schema_version": 1,
   "implementation": {
     "substantive_executor": "auto",
-    "model": "gpt-5.6-sol",
-    "thinking": "xhigh"
+    "model": "inherit",
+    "thinking": "inherit"
   },
   "release": {
-    "model": "gpt-5.6-sol",
-    "thinking": "xhigh"
+    "model": "inherit",
+    "thinking": "inherit"
   },
   "collaboration": {
     "policy": "auto",
-    "model": "gpt-5.6-luna",
-    "thinking": "max"
+    "model": "inherit",
+    "thinking": "inherit"
   }
 }
 ```
+
+`inherit` means omit a model or effort override and use the invoking session or
+runtime default. A user who starts the owner with one model and prefers another
+for substantive implementation helpers can set, for example:
+
+```json
+{
+  "schema_version": 1,
+  "implementation": {
+    "substantive_executor": "auto",
+    "model": "gpt-5.6-luna",
+    "thinking": "xhigh"
+  },
+  "release": {"model": "inherit", "thinking": "inherit"},
+  "collaboration": {
+    "policy": "auto",
+    "model": "gpt-5.6-luna",
+    "thinking": "xhigh"
+  }
+}
+```
+
+This does not choose or replace the owner. The user selects the owner session;
+the owner decides whether a helper is useful and records the actual route.
 
 `release` is the legacy config key for the production phase of `ship` and its
 aliases; it is not a third goal mode and cannot create a handoff. Likewise,
@@ -44,12 +69,12 @@ Supported flags remain:
 ```text
 --implementation-executor task|direct|subagent|auto
 --implementation-model MODEL
---implementation-thinking none|minimal|low|medium|high|xhigh|max|ultra
+--implementation-thinking inherit|none|minimal|low|medium|high|xhigh|max|ultra
 --release-model MODEL
---release-thinking none|minimal|low|medium|high|xhigh|max|ultra
+--release-thinking inherit|none|minimal|low|medium|high|xhigh|max|ultra
 --collaboration auto|off
 --collaboration-model MODEL
---collaboration-thinking none|minimal|low|medium|high|xhigh|max|ultra
+--collaboration-thinking inherit|none|minimal|low|medium|high|xhigh|max|ultra
 ```
 
 `auto` leaves execution-shape judgment with the owner. `off` forbids helpers.

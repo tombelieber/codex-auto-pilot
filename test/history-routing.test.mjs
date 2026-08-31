@@ -251,3 +251,24 @@ test('current routing schema keeps both goal modes and ship aliases in the invok
   assert.equal(ownerTransfer.status, 'deviation')
   assert.match(ownerTransfer.deviations.join('\n'), /invoking task must remain/)
 })
+
+test('inherited model preferences accept the actual owner-selected helper model and effort', () => {
+  const inherited = {
+    ...currentManifest('pr'),
+    routing_config: {
+      implementation: {substantive_executor: 'auto', model: 'inherit', thinking: 'inherit'},
+      release: {model: 'inherit', thinking: 'inherit'},
+      collaboration: {policy: 'auto', model: 'inherit', thinking: 'inherit'},
+    },
+  }
+  const result = auditRouting({
+    message: marker({
+      lane: 'collaboration_subagent', task_ref: null, worktree: true,
+      model: 'gpt-5.6-luna', thinking: 'xhigh', reason: 'The owner selected a bounded implementation helper.',
+    }, notRequested()),
+    manifest: inherited,
+    subagents: 1,
+  })
+  assert.equal(result.status, 'passed')
+  assert.deepEqual(result.deviations, [])
+})

@@ -1,6 +1,6 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.13.3",
+  "version": "0.14.0",
   "description": "Owner-directed delivery to fully release-ready PRs or verified production with zero scoped leftovers.",
   "bin": {
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
@@ -15,6 +15,7 @@
     ".codex-plugin/",
     "hooks/",
     "lib/",
+    "skills/batch-grill-me/SKILL.md",
     "skills/auto-pilot/SKILL.md",
     "skills/auto-pilot/agents/openai.yaml",
     "skills/auto-pilot/references/automatic-promotion.md",
