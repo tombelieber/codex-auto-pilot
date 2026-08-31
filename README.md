@@ -66,7 +66,7 @@ Supplying that input resumes the same task.
 From the current tagged GitHub release:
 
 ```bash
-npx --yes --allow-git=all github:tombelieber/codex-auto-pilot#v0.13.1 install
+npx --yes --allow-git=all github:tombelieber/codex-auto-pilot#v0.13.2 install
 ```
 
 From this checkout:
@@ -114,10 +114,20 @@ PR_READY includes one passed `exact-candidate` check and one passed
 `production-release-ready` check covering the real path, preflight,
 credentials, configuration, migrations, recovery, and exact next action.
 
+When migration applies, PR_READY also requires a structured
+`production-data-compatibility` check. Representative data from the currently
+supported production version must pass the real upgrade path and remain
+operable through the exact candidate's reads, applicable writes, critical
+workflows, invariants, and rolling-version or hard-cutover boundary. A migration
+marker, schema version, backfill count, row count, or retained record alone does
+not qualify.
+
 SHIPPED additionally binds goal/attempt/contract/base/head/PR immediately before
 mutation, proves the merged identity and every impacted production capability,
-and completes applicable release notes and cleanup. Production-live with failed
-cleanup is recorded as incomplete and repaired before success.
+and links any migrated-data check to a real production case using a migrated
+legacy record through the new system. It also completes applicable release notes
+and cleanup. Production-live with failed cleanup or stranded legacy data is
+recorded as incomplete and repaired before success.
 
 Validate a receipt:
 
