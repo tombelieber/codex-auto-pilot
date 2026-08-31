@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {execFileSync, spawnSync} from 'node:child_process'
+import {spawnSync} from 'node:child_process'
 import {createHash} from 'node:crypto'
 import {appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
@@ -10,7 +10,7 @@ import {fileURLToPath} from 'node:url'
 import {handleHookEvent, materializeHistory, parseAutoPilotInvocation} from '../skills/auto-pilot/scripts/history.mjs'
 
 const validator = resolve(fileURLToPath(new URL('../skills/auto-pilot/scripts/validate_receipt.py', import.meta.url)))
-const contractSha = execFileSync('python3', [validator, '--contract-sha256'], {encoding: 'utf8'}).trim()
+const contractSha = 'e7a244b9698e36b8f08da520fc404ce89cb451de147d0a68d836954ee29d3c0e'
 const headSha = 'a'.repeat(40)
 const baseSha = 'b'.repeat(40)
 const mergeSha = 'c'.repeat(40)

@@ -66,7 +66,7 @@ Supplying that input resumes the same task.
 From the current tagged GitHub release:
 
 ```bash
-npx --yes --allow-git=all github:tombelieber/codex-auto-pilot#v0.13.2 install
+npx --yes --allow-git=all github:tombelieber/codex-auto-pilot#v0.13.3 install
 ```
 
 From this checkout:
@@ -100,7 +100,8 @@ node bin/codex-auto-pilot.mjs skill-path
 
 ## Evidence contract
 
-Schema v9 separates goal outcome from attempt status:
+Schema v10 separates goal outcome from attempt status and adds mandatory
+production regression compatibility:
 
 ```text
 goal_mode:       pr | ship
@@ -113,6 +114,14 @@ open_items:      [] for achieved; non-empty for incomplete
 PR_READY includes one passed `exact-candidate` check and one passed
 `production-release-ready` check covering the real path, preflight,
 credentials, configuration, migrations, recovery, and exact next action.
+
+Every schema-v10 achieved candidate also requires a passed
+`production-regression-compatibility` check. It proves affected existing
+production capabilities, supported interfaces/configuration, and representative
+valid current, legacy, and edge-shaped data remain operable. New or tightened
+release gates must accept that valid baseline. Any false positive or compatibility
+gap is repaired and requalified before admission; a working production path is
+never disabled or valid data stranded merely to make a gate pass.
 
 When migration applies, PR_READY also requires a structured
 `production-data-compatibility` check. Representative data from the currently
@@ -127,7 +136,9 @@ mutation, proves the merged identity and every impacted production capability,
 and links any migrated-data check to a real production case using a migrated
 legacy record through the new system. It also completes applicable release notes
 and cleanup. Production-live with failed cleanup or stranded legacy data is
-recorded as incomplete and repaired before success.
+recorded as incomplete and repaired before success. Schema-v9 receipts from
+released v0.13.x contracts remain valid under frozen v9 semantics; v10 does not
+retroactively impose its new gate on historical receipts.
 
 Validate a receipt:
 

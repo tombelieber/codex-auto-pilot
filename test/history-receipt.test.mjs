@@ -5,10 +5,10 @@ import {join} from 'node:path'
 import test from 'node:test'
 
 import {collectCompletionReceipt} from '../skills/auto-pilot/scripts/history-receipt.mjs'
-import {attemptId, goalId, incompleteReceipt, releaseMessage, shippedReceipt} from './v9-fixture.mjs'
+import {attemptId, goalId, incompleteReceipt, releaseMessage, shippedReceipt} from './v10-fixture.mjs'
 
 function fixture(value = shippedReceipt()) {
-  const root = mkdtempSync(join(tmpdir(), 'history-receipt-v9-'))
+  const root = mkdtempSync(join(tmpdir(), 'history-receipt-v10-'))
   const archive = join(root, 'archive')
   const receipt = join(root, 'receipt.json')
   mkdirSync(archive)
