@@ -1,23 +1,36 @@
 {
   "name": "codex-auto-pilot",
   "version": "0.14.0",
-  "description": "Deliver approved goals to fully release-ready PRs or verified production with zero scoped leftovers.",
-  "author": { "name": "tombelieber", "url": "https://github.com/tombelieber" },
+  "description": "Thin guidance for fully verified release-ready PRs or proven production delivery.",
+  "author": {
+    "name": "tombelieber",
+    "url": "https://github.com/tombelieber"
+  },
   "homepage": "https://github.com/tombelieber/codex-auto-pilot",
   "repository": "https://github.com/tombelieber/codex-auto-pilot",
   "license": "MIT",
-  "keywords": ["automation", "delivery", "plans", "git"],
+  "keywords": [
+    "automation",
+    "delivery",
+    "plans",
+    "git"
+  ],
   "skills": "./skills/",
-  "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Codex Auto Pilot",
     "shortDescription": "Reach PR_READY or SHIPPED in one task",
-    "longDescription": "Keeps the invoking task accountable and resumable until either an open candidate is fully production-release-ready or the exact candidate is proven live in production with zero scoped leftovers. Release, promote, and deploy normalize to ship; blockers remain resumable checkpoints.",
+    "longDescription": "Guides both pr and ship through the same fully verified release readiness. PR_READY stops before merge; SHIPPED also releases and proves production. Clarifies unresolved decisions with Batch Grill Me, using repository tools without a receipt harness.",
     "developerName": "tombelieber",
     "category": "Productivity",
-    "capabilities": ["Write", "Git", "Release"],
+    "capabilities": [
+      "Write",
+      "Git",
+      "Release"
+    ],
     "websiteURL": "https://github.com/tombelieber/codex-auto-pilot",
-    "defaultPrompt": ["$auto-pilot pr <approved-plan-path>. Use ship for complete production delivery. Keep this task accountable through waits and repairs; succeed only as PR_READY or SHIPPED with zero scoped leftovers."],
+    "defaultPrompt": [
+      "$auto-pilot pr <goal or PR>. Use ship to also release and verify production; both modes require full release readiness."
+    ],
     "brandColor": "#2563EB"
   }
 }

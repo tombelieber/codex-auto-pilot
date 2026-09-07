@@ -1,47 +1,44 @@
 {
   "name": "codex-auto-pilot",
   "version": "0.14.0",
-  "description": "Owner-directed delivery to fully release-ready PRs or verified production with zero scoped leftovers.",
+  "description": "Thin guidance for fully verified release-ready PRs or proven production delivery.",
   "bin": {
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
   },
   "scripts": {
-    "check": "node --check bin/*.mjs && node --check lib/*.mjs && node --check scripts/*.mjs && node --check skills/auto-pilot/scripts/*.mjs && node --check test/*.mjs && node --test && node scripts/check-public-safety.mjs && npm run pack:dry",
+    "check": "node --check bin/*.mjs && node --check lib/*.mjs && node --check scripts/*.mjs && node --check legacy/auto-pilot/scripts/*.mjs && node --check test/*.mjs && node --test && node scripts/check-public-safety.mjs && npm run pack:dry",
     "test": "node --test",
     "pack:dry": "npm pack --dry-run --json"
   },
   "files": [
     "bin/",
     ".codex-plugin/",
-    "hooks/",
     "lib/",
     "skills/batch-grill-me/SKILL.md",
     "skills/auto-pilot/SKILL.md",
     "skills/auto-pilot/agents/openai.yaml",
-    "skills/auto-pilot/references/automatic-promotion.md",
-    "skills/auto-pilot/references/configuration.md",
-    "skills/auto-pilot/references/delegated-implementation.md",
-    "skills/auto-pilot/references/history-schema.md",
-    "skills/auto-pilot/references/receipt-schema.md",
-    "skills/auto-pilot/references/release-promotion.md",
-    "skills/auto-pilot/scripts/collect_history.mjs",
-    "skills/auto-pilot/scripts/history-bundle.mjs",
-    "skills/auto-pilot/scripts/history-receipt.mjs",
-    "skills/auto-pilot/scripts/history-routing.mjs",
-    "skills/auto-pilot/scripts/history.mjs",
-    "skills/auto-pilot/scripts/history-materialize.mjs",
-    "skills/auto-pilot/scripts/resolve_config.mjs",
-    "skills/auto-pilot/scripts/new_goal_id.mjs",
-    "skills/auto-pilot/scripts/validate_receipt.py",
     "install.sh",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "legacy/"
   ],
-  "keywords": ["codex", "automation", "delivery", "skills"],
+  "keywords": [
+    "codex",
+    "automation",
+    "delivery",
+    "skills"
+  ],
   "homepage": "https://github.com/tombelieber/codex-auto-pilot#readme",
-  "bugs": {"url": "https://github.com/tombelieber/codex-auto-pilot/issues"},
-  "repository": {"type": "git", "url": "git+https://github.com/tombelieber/codex-auto-pilot.git"},
+  "bugs": {
+    "url": "https://github.com/tombelieber/codex-auto-pilot/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tombelieber/codex-auto-pilot.git"
+  },
   "author": "tombelieber",
   "license": "MIT",
-  "engines": {"node": ">=18"}
+  "engines": {
+    "node": ">=18"
+  }
 }

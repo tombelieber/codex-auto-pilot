@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import test from 'node:test'
 
-import {collectCompletionReceipt} from '../skills/auto-pilot/scripts/history-receipt.mjs'
+import {collectCompletionReceipt} from '../legacy/auto-pilot/scripts/history-receipt.mjs'
 import {attemptId, goalId, incompleteReceipt, releaseMessage, shippedReceipt} from './v10-fixture.mjs'
 
 function fixture(value = shippedReceipt()) {

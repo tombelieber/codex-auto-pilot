@@ -3,7 +3,7 @@ import {appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdi
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import test from 'node:test'
-import {enforceReleaseRouting, parseCodexTranscript} from '../skills/auto-pilot/scripts/history-materialize.mjs'
+import {enforceReleaseRouting, parseCodexTranscript} from '../legacy/auto-pilot/scripts/history-materialize.mjs'
 import {
   handleHookEvent,
   historyReport,
@@ -14,7 +14,7 @@ import {
   materializeHistory,
   pruneExpiredRaw,
   setRawRetention,
-} from '../skills/auto-pilot/scripts/history.mjs'
+} from '../legacy/auto-pilot/scripts/history.mjs'
 import {goalId, incompleteReceipt, prReadyReceipt} from './v10-fixture.mjs'
 
 function jsonl(...events) { return `${events.map((event) => JSON.stringify(event)).join('\n')}\n` }

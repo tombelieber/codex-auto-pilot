@@ -8,7 +8,7 @@ import {
   DEFAULT_AUTO_PILOT_SETTINGS,
   parseInvocationOverrides,
   resolveAutoPilotConfig,
-} from '../skills/auto-pilot/scripts/resolve_config.mjs'
+} from '../legacy/auto-pilot/scripts/resolve_config.mjs'
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-config-'))

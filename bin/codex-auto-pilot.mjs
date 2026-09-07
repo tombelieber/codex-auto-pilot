@@ -3,15 +3,6 @@ import {readFileSync} from 'node:fs'
 import {dirname, join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {doctor, install} from '../lib/installer.mjs'
-import {
-  historyGoals,
-  historyReport,
-  historyRuns,
-  historyStatus,
-  materializeHistory,
-  resolveHistoryRoot,
-  setRawRetention,
-} from '../skills/auto-pilot/scripts/history.mjs'
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const version = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')).version
@@ -55,6 +46,10 @@ function parseOptions(argv) {
 }
 
 async function historyCommand(argv) {
+  const {
+    historyGoals, historyReport, historyRuns, historyStatus,
+    materializeHistory, resolveHistoryRoot, setRawRetention,
+  } = await import('../legacy/auto-pilot/scripts/history.mjs')
   const command = argv[0] || 'status'
   if (command === 'path') return console.log(resolveHistoryRoot())
   if (command === 'status') return printJson(historyStatus())
@@ -98,7 +93,9 @@ Usage:
   codex-auto-pilot history retention <days|forever>
   codex-auto-pilot --version
 
-Install copies the Auto Pilot skill. --with-local-history also adds passive user-level Codex hooks.
-No history data is uploaded, and hooks never add model context.
+Install copies the guidance skill and Batch Grill Me; no hooks are enabled by default.
+--with-local-history preserves the legacy receipt workflow with passive user-level Codex hooks.
+Previously opted-in hooks are redirected to the separate legacy runtime on upgrade.
+History is optional compatibility tooling, not a completion gate for the guidance skill.
 Set CODEX_AUTO_PILOT_HOME to use an isolated Codex home.`)
 }
