@@ -1,6 +1,6 @@
 {
   "name": "codex-auto-pilot",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Thin guidance for fully verified release-ready PRs or proven production delivery.",
   "bin": {
     "codex-auto-pilot": "bin/codex-auto-pilot.mjs"
