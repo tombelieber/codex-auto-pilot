@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict'
-import {existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync} from 'node:fs'
+import {cpSync, existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync} from 'node:fs'
+import {spawnSync} from 'node:child_process'
 import {mkdtempSync, rmSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {fileURLToPath} from 'node:url'
+import {fileURLToPath, pathToFileURL} from 'node:url'
 import test from 'node:test'
 import {doctor, install, resolveHome, resolvePaths} from '../lib/installer.mjs'
+import {installHistoryHooks} from '../lib/hooks-installer.mjs'
+import {goalId, prReadyReceipt} from './v10-fixture.mjs'
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
@@ -16,8 +19,8 @@ function fixture() {
   mkdirSync(join(sourceRoot, 'skills', 'auto-pilot', 'nested'), {recursive: true})
   writeFileSync(join(sourceRoot, 'skills', 'auto-pilot', 'SKILL.md'), '# Auto Pilot\n')
   writeFileSync(join(sourceRoot, 'skills', 'auto-pilot', 'nested', 'rule.txt'), 'safe\n')
-  mkdirSync(join(sourceRoot, 'skills', 'auto-pilot', 'scripts'))
-  writeFileSync(join(sourceRoot, 'skills', 'auto-pilot', 'scripts', 'collect_history.mjs'), 'process.stdout.write("{}\\n")\n')
+  mkdirSync(join(sourceRoot, 'legacy', 'auto-pilot', 'scripts'), {recursive: true})
+  writeFileSync(join(sourceRoot, 'legacy', 'auto-pilot', 'scripts', 'collect_history.mjs'), 'process.stdout.write("{}\\n")\n')
   mkdirSync(join(sourceRoot, 'skills', 'batch-grill-me'), {recursive: true})
   writeFileSync(join(sourceRoot, 'skills', 'batch-grill-me', 'SKILL.md'), '# Batch Grill Me\n')
   return {root, sourceRoot, home, cleanup: () => rmSync(root, {recursive: true, force: true})}
@@ -51,17 +54,15 @@ test('installs the hard dependency before the Auto Pilot skill', () => {
   } finally { f.cleanup() }
 })
 
-test('the repository installer includes current routing files', () => {
+test('the repository installs guidance without scripts, references, history or hooks', () => {
   const root = mkdtempSync(join(tmpdir(), 'codex-auto-pilot-install-v080-'))
   const home = join(root, 'home')
   try {
     install({sourceRoot: projectRoot, home})
     const skill = join(home, '.agents', 'skills', 'auto-pilot')
-    for (const path of [
-      'references/configuration.md',
-      'scripts/resolve_config.mjs',
-      'scripts/history-routing.mjs',
-    ]) assert.equal(existsSync(join(skill, path)), true)
+    assert.deepEqual(readdirSync(skill).sort(), ['SKILL.md', 'agents'])
+    assert.equal(existsSync(join(home, '.codex', 'hooks.json')), false)
+    assert.equal(existsSync(join(home, '.codex-auto-pilot')), false)
     assert.equal(existsSync(join(home, '.agents', 'skills', 'batch-grill-me', 'SKILL.md')), true)
   } finally { rmSync(root, {recursive: true, force: true}) }
 })
@@ -158,7 +159,7 @@ test('local history opt-in preserves existing hooks and installs all lifecycle e
     assert.ok(result.backupRoot)
     assert.equal(hooks.hooks.PreToolUse[0].hooks[0].command, 'safe-existing-hook')
     for (const event of ['UserPromptSubmit', 'SubagentStop', 'Stop', 'SessionEnd']) {
-      assert.match(hooks.hooks[event][0].hooks[0].command, /\.agents\/skills\/auto-pilot\/scripts\/collect_history\.mjs/)
+      assert.match(hooks.hooks[event][0].hooks[0].command, /\.codex-auto-pilot\/legacy\/auto-pilot\/scripts\/collect_history\.mjs/)
     }
     assert.equal(doctor({sourceRoot: f.sourceRoot, home: f.home, withLocalHistory: true}).items.at(-1).status, 'current')
   } finally { f.cleanup() }
@@ -174,4 +175,74 @@ test('local history dry-run rejects a symlinked .codex ancestor', () => {
     assert.throws(() => install({sourceRoot: f.sourceRoot, home: f.home, withLocalHistory: true, dryRun: true}), /refusing symlink/)
     assert.equal(existsSync(join(outside, 'hooks.json')), false)
   } finally { f.cleanup() }
+})
+
+test('upgrading an opted-in install preserves and operates legacy history outside guidance', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'auto-pilot-guidance-upgrade-'))
+  const home = join(root, 'home')
+  const oldSkill = join(home, '.agents', 'skills', 'auto-pilot')
+  const dataRoot = join(home, '.codex-auto-pilot', 'history')
+  try {
+    cpSync(join(projectRoot, 'legacy', 'auto-pilot'), oldSkill, {recursive: true})
+    mkdirSync(join(home, '.codex'), {recursive: true})
+    const hooksPath = join(home, '.codex', 'hooks.json')
+    writeFileSync(hooksPath, JSON.stringify({hooks: {PreToolUse: [{hooks: [{type: 'command', command: 'unrelated-hook'}]}]}}))
+    installHistoryHooks({home, installedSkill: oldSkill})
+    const customized = JSON.parse(readFileSync(hooksPath))
+    delete customized.hooks.SubagentStop
+    customized.hooks.UserPromptSubmit[0].matcher = 'user-selected-scope'
+    customized.hooks.UserPromptSubmit[0].hooks[0].timeout = 7
+    writeFileSync(hooksPath, JSON.stringify(customized))
+    const hooksBefore = readFileSync(hooksPath)
+    const original = await import(pathToFileURL(join(oldSkill, 'scripts', 'history.mjs')))
+    const env = {CODEX_AUTO_PILOT_CONFIG: join(root, 'no-config.json')}
+    const first = await original.handleHookEvent({
+      hook_event_name: 'UserPromptSubmit', session_id: 'upgrade-session', turn_id: 'turn-1',
+      prompt: `$auto-pilot pr docs/plan.md <!-- auto-pilot-goal: ${goalId} -->`,
+    }, {dataRoot, env})
+    const activePath = join(dataRoot, 'active-goals', 'upgrade-session.json')
+    const activeBefore = readFileSync(activePath)
+    const manifestBefore = readFileSync(join(first.directory, 'manifest.json'))
+
+    // No repeated opt-in flag: a user's previously installed hooks keep working.
+    const result = install({sourceRoot: projectRoot, home, force: true})
+    assert.ok(result.backupRoot)
+    assert.deepEqual(readFileSync(join(result.backupRoot, '.codex', 'hooks.json')), hooksBefore)
+    assert.deepEqual(readFileSync(activePath), activeBefore)
+    assert.deepEqual(readFileSync(join(first.directory, 'manifest.json')), manifestBefore)
+    assert.deepEqual(readdirSync(oldSkill).sort(), ['SKILL.md', 'agents'])
+    assert.equal(JSON.parse(readFileSync(hooksPath)).hooks.PreToolUse[0].hooks[0].command, 'unrelated-hook')
+    const migratedHooks = JSON.parse(readFileSync(hooksPath)).hooks
+    assert.equal(migratedHooks.SubagentStop, undefined)
+    assert.equal(migratedHooks.UserPromptSubmit[0].matcher, 'user-selected-scope')
+    assert.equal(migratedHooks.UserPromptSubmit[0].hooks[0].timeout, 7)
+    assert.ok(doctor({sourceRoot: projectRoot, home}).items.every(item => item.status === 'current'))
+    assert.ok(install({sourceRoot: projectRoot, home}).items.every(item => item.status === 'skipped'))
+
+    const legacy = join(home, '.codex-auto-pilot', 'legacy', 'auto-pilot')
+    const collector = join(legacy, 'scripts', 'collect_history.mjs')
+    const registered = JSON.parse(readFileSync(hooksPath)).hooks.UserPromptSubmit[0].hooks[0]
+    assert.ok(registered.command.includes(collector))
+    const resumed = spawnSync(process.execPath, [collector], {
+      input: JSON.stringify({hook_event_name: 'UserPromptSubmit', session_id: 'upgrade-session', turn_id: 'turn-2', prompt: 'Continue.'}),
+      encoding: 'utf8', env: {...process.env, ...env, CODEX_AUTO_PILOT_DATA: dataRoot},
+    })
+    assert.equal(resumed.status, 0, resumed.stderr)
+    assert.equal(resumed.stdout.trim(), '{}')
+    const runs = readdirSync(join(dataRoot, 'runs'))
+    assert.equal(runs.length, 2)
+    const resumedManifest = runs.map(name => JSON.parse(readFileSync(join(dataRoot, 'runs', name, 'manifest.json'))))
+      .find(item => item.turn_id === 'turn-2')
+    assert.equal(resumedManifest.goal_id, goalId)
+    assert.equal(resumedManifest.invocation_source, 'active_goal_resume')
+
+    const receiptPath = join(root, 'old-receipt.json')
+    writeFileSync(receiptPath, JSON.stringify(prReadyReceipt()))
+    const validator = join(legacy, 'scripts', 'validate_receipt.py')
+    const validated = spawnSync('python3', [validator, receiptPath], {encoding: 'utf8'})
+    assert.equal(validated.status, 0, validated.stderr)
+    // Preserve the pre-guidance contract identity, not just JSON parsing.
+    const digest = spawnSync('python3', [validator, '--contract-sha256'], {encoding: 'utf8'})
+    assert.equal(digest.stdout.trim(), 'cbf5d3eb25dcab9d40621522f0c2cc5d3c1f83e61cd9a1782854274d866a6a44')
+  } finally { rmSync(root, {recursive: true, force: true}) }
 })

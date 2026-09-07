@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os'
 import {join, resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 
-export const validator = resolve(fileURLToPath(new URL('../skills/auto-pilot/scripts/validate_receipt.py', import.meta.url)))
+export const validator = resolve(fileURLToPath(new URL('../legacy/auto-pilot/scripts/validate_receipt.py', import.meta.url)))
 export const contractSha = 'e7a244b9698e36b8f08da520fc404ce89cb451de147d0a68d836954ee29d3c0e'
 export const headSha = 'a'.repeat(40)
 export const baseSha = 'b'.repeat(40)

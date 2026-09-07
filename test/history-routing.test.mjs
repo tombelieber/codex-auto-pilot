@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {auditRouting, parseRoutingMarker} from '../skills/auto-pilot/scripts/history-routing.mjs'
+import {auditRouting, parseRoutingMarker} from '../legacy/auto-pilot/scripts/history-routing.mjs'
 
 const implementationDefaults = {
   substantive_executor: 'auto', model: 'gpt-5.6-sol', thinking: 'xhigh',
